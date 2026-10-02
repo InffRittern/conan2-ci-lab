@@ -1,0 +1,247 @@
+networks:
+  ci_network:
+    driver: bridge
+
+volumes:
+  gitea_data:
+  jenkins_home:
+  artifactory_data:
+  postgres_data:
+  dind_data:
+
+services:
+  # =========================================================================
+  # GITEA — Git-хостинг
+  # Версия: 28.0.0 (актуальная стабильная)
+  # =========================================================================
+  gitea:
+    image: gitea/gitea:28.0.0
+    container_name: gitea
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"     # Web UI / HTTP
+      - "222:22"        # Git over SSH
+
+    environment:
+      # Часовой пояс задаётся переменной, а не монтированием /etc/localtime
+      # с хоста (файл есть не везде, а отсутствующий путь Docker создаёт
+      # как каталог — это ломает запуск).
+      - TZ=${TZ:-UTC}
+
+      # --- PostgreSQL (общий сервис postgres) ---
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea
+      - GITEA__database__SSL_MODE=disable
+
+      # --- Server ---
+      - GITEA__server__ROOT_URL=http://localhost:3000/
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__server__DOMAIN=localhost
+      - GITEA__server__SSH_DOMAIN=localhost
+      - GITEA__server__SSH_PORT=222
+      - GITEA__server__START_SSH_SERVER=false
+
+      # --- Registration / security ---
+      - GITEA__service__DISABLE_REGISTRATION=false
+      - GITEA__service__REQUIRE_SIGNIN_VIEW=false
+      - GITEA__security__INSTALL_LOCK=true
+
+      # --- Packages ---
+      - GITEA__packages__ENABLED=true
+
+      # --- Webhooks (секция security, [webhook] устарела в v28) ---
+      # Catch-all "*" запрещён; перечисляются хосты, куда шлём вебхуки.
+      - GITEA__security__ALLOWED_HOST_LIST=jenkins
+
+      # --- Logs ---
+      - GITEA__log__LEVEL=Info
+
+    volumes:
+      - gitea_data:/data
+
+    healthcheck:
+      test:
+        ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - ci_network
+
+
+  # =========================================================================
+  # JENKINS — CI/CD
+  # Последняя LTS: 2.580.1
+  # =========================================================================
+  jenkins:
+    build:
+      context: ./jenkins
+      args:
+        DOCKER_CLI_VERSION: "29.8.2"
+    image: ci-jenkins:2.580.1
+    container_name: jenkins
+    restart: unless-stopped
+    user: jenkins
+
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Djenkins.model.Jenkins.workspaceDir=/var/jenkins_home/workspace
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc
+      - TZ=${TZ:-UTC}
+      # Демон Docker — sidecar-сервис docker (dind), а не сокет хоста.
+      - DOCKER_HOST=tcp://docker:2375
+
+    volumes:
+      - jenkins_home:/var/jenkins_home
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8080/login >/dev/null || exit 1"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+    depends_on:
+      gitea:
+        condition: service_healthy
+      docker:
+        condition: service_healthy
+
+    networks:
+      - ci_network
+
+
+  # =========================================================================
+  # DOCKER-IN-DOCKER — демон для сборок Jenkins
+  # Ничего хостового не используется: ни /var/run/docker.sock, ни
+  # /usr/bin/docker, ни gid сокета.
+  # =========================================================================
+  docker:
+    image: docker:29.8.2-dind
+    container_name: ci-dind
+    restart: unless-stopped
+
+    privileged: true
+
+    command:
+      - dockerd
+      - --host=tcp://0.0.0.0:2375
+      - --host=unix:///var/run/docker.sock
+      - --tls=false
+
+    environment:
+      # Без TLS: обмен идёт только внутри ci_network.
+      - DOCKER_TLS_CERTDIR=
+      - TZ=${TZ:-UTC}
+
+    volumes:
+      - dind_data:/var/lib/docker
+
+    healthcheck:
+      test:
+        ["CMD", "docker", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+    networks:
+      - ci_network
+
+
+  # =========================================================================
+  # POSTGRESQL — общая БД для Gitea и Artifactory
+  # Версия: 18 (актуальная стабильная; 19 — только beta).
+  # База artifactory создаётся из POSTGRES_* ниже, база gitea — init-скриптом.
+  # =========================================================================
+  postgres:
+    image: postgres:18-alpine
+    container_name: ci-postgres
+    restart: unless-stopped
+
+    environment:
+      - POSTGRES_USER=artifactory
+      - POSTGRES_PASSWORD=artifactory
+      - POSTGRES_DB=artifactory
+
+    volumes:
+      # В образе 18 PGDATA=/var/lib/postgresql/18/docker, том объявлен как
+      # /var/lib/postgresql (в 17 и ниже было /var/lib/postgresql/data).
+      - postgres_data:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U artifactory"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - ci_network
+
+
+  # =========================================================================
+  # JFROG ARTIFACTORY — Binary/Package Registry
+  # Conan / Docker / generic artifacts
+  # Версия: 7.161.26. Начиная с этой линейки требуется PostgreSQL
+  # (встроенная Derby больше не поддерживается).
+  # =========================================================================
+  artifactory:
+    image: releases-docker.jfrog.io/jfrog/artifactory-oss:7.161.26
+    container_name: artifactory
+    restart: unless-stopped
+
+    ports:
+      - "8081:8081"     # Artifactory
+      - "8082:8082"     # Router
+
+    environment:
+      - EXTRA_JAVA_OPTIONS=-Xms512m -Xmx2g
+      - TZ=${TZ:-UTC}
+      # Настройки БД через переменные окружения JF_* — без монтирования
+      # файла конфига (bind-mount требовал прав на запись под uid контейнера
+      # и был главным источником отказов запуска).
+      - JF_SHARED_DATABASE_TYPE=postgresql
+      - JF_SHARED_DATABASE_DRIVER=org.postgresql.Driver
+      - JF_SHARED_DATABASE_URL=jdbc:postgresql://postgres:5432/artifactory
+      - JF_SHARED_DATABASE_USERNAME=artifactory
+      - JF_SHARED_DATABASE_PASSWORD=artifactory
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - artifactory_data:/var/opt/jfrog/artifactory
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8082/router/api/v1/system/health >/dev/null || exit 1"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+    networks:
+      - ci_network
