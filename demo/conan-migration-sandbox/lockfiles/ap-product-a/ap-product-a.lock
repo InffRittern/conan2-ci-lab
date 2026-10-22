@@ -1,0 +1,21 @@
+{
+    "version": "0.5",
+    "requires": [
+        "ap-utils/1.0.0#6158a478daf4d1aca2ab6ffccbd9034b%1792681144.4745748",
+        "ap-texture/1.0.0#70e1f8b85ef34c947a341c2c01c65b01%1792681149.0013943",
+        "ap-sdk/1.0.0#450cfdda41e863f50683cb36439e9593%1792681153.8340507",
+        "ap-product-a/1.0.0#29503652ed5e8e2c54c97c789fd79a81%1792681159.4885948",
+        "ap-headers/1.3.290#39dcfd866b758dcbe0391feb8e26b226%1792681139.7905488",
+        "ap-gfx/1.0.0#2d598b40b743d223dcb5f3ff9c15b1d2%1792681146.748154",
+        "ap-box/1.0.0#c207a4df3521270c110670696310dba5%1792681151.350972",
+        "ap-base/1.0.0#a339abe2c31c562c40f99f778d234d0d%1792681137.2956562"
+    ],
+    "build_requires": [],
+    "python_requires": [],
+    "overrides": {
+        "ap-headers/[>=1.4 <2]": [
+            "ap-headers/1.3.290"
+        ]
+    },
+    "config_requires": []
+}

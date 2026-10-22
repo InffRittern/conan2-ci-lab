@@ -44,7 +44,7 @@ ensure_remote "$PRODUCTS_REMOTE" "$PRODUCTS_REMOTE"
 ensure_remote "$DEVELOP_REMOTE" "$DEVELOP_REMOTE"
 
 # ConanCenter is added by default and must not shadow sandbox packages such as
-# sfl/1.0.0. Put the Artifactory remotes first in resolution order.
+# ap-base/1.0.0. Put the Artifactory remotes first in resolution order.
 conan remote update "$PACKAGES_REMOTE" --index=0
 conan remote update "$PRODUCTS_REMOTE" --index=1
 conan remote update "$DEVELOP_REMOTE" --index=2

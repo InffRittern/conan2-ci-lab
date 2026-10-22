@@ -10,6 +10,10 @@ volumes:
   artifactory_ce_data:
   postgres_data:
   dind_data:
+  # Keep the historical volume name: the Linux/Windows bootstrap fallback
+  # mounts "conan_workspace" without a Compose project prefix.
+  conan_workspace:
+    name: conan_workspace
 
 services:
   # =========================================================================
@@ -53,7 +57,8 @@ services:
       - GITEA__security__INSTALL_LOCK=true
 
       # --- Packages ---
-      - GITEA__packages__ENABLED=true
+      # Gitea хранит только исходники. Conan-артефакты — в Artifactory.
+      - GITEA__packages__ENABLED=false
 
       # --- Webhooks (секция security, [webhook] устарела в v28) ---
       # Catch-all "*" запрещён; перечисляются хосты, куда шлём вебхуки.
@@ -163,6 +168,26 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+    networks:
+      - ci_network
+
+
+  # =========================================================================
+  # CONAN — инструментарий Conan 2 для ручных проверок и отладки
+  # Bootstrap ставит сюда gcc/g++/cmake/ninja/git и conan>=2.32.
+  # Том хранит /workspace; профиль и remotes bootstrap переустанавливает
+  # после пересоздания контейнера.
+  # =========================================================================
+  conan:
+    image: ubuntu:24.04
+    container_name: conan
+    hostname: conan
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+
+    volumes:
+      - conan_workspace:/workspace
 
     networks:
       - ci_network
@@ -299,7 +324,6 @@ services:
       - ARTIFACTORY_URL=http://artifactory:8082
       - ARTIFACTORY_USER=admin
       - ARTIFACTORY_PASSWORD=${ARTIFACTORY_PASSWORD:-password}
-      - CONAN_REPOS=packages products develop
 
     entrypoint: ["/bin/sh", "-ec"]
     command:
@@ -307,12 +331,58 @@ services:
         # REST /api/repositories requires Pro; CE supports repo management
         # через PATCH /api/system/configuration (YAML). PATCH идемпотентен:
         # существующие репозитории обновляются, отсутствующие создаются.
-        {
-          echo "localRepositories:"
-          for repo in $${CONAN_REPOS}; do
-            printf '  %s:\n    type: conan\n    description: Conan packages\n' "$${repo}"
-          done
-        } >/tmp/repos.yaml
+        #
+        # source-* — то, что читает Conan 1; packages/products/develop —
+        # целевые Conan 2 remotes; conan/conan2 — virtual-представления.
+        cat >/tmp/repos.yaml <<'YAML'
+        localRepositories:
+          conan-local:
+            type: conan
+            description: Conan 1 source packages
+          ap-source:
+            type: conan
+            description: Conan 1 source packages (additional)
+          conan-thirdparty:
+            type: conan
+            description: Conan 1 third-party packages
+          ap-thirdparty:
+            type: conan
+            description: Additional third-party packages
+          generic-local:
+            type: generic
+            description: Generic source artifacts
+          packages:
+            type: conan
+            description: Conan 2 packages stage
+          products:
+            type: conan
+            description: Conan 2 products stage
+          develop:
+            type: conan
+            description: Conan 2 development stage
+
+        remoteRepositories:
+          conan-remote:
+            type: conan
+            url: https://center.conan.io
+            description: ConanCenter
+
+        virtualRepositories:
+          conan:
+            type: conan
+            repositories:
+              - conan-local
+              - ap-source
+              - conan-thirdparty
+              - ap-thirdparty
+              - conan-remote
+          conan2:
+            type: conan
+            repositories:
+              - packages
+              - products
+              - develop
+        YAML
 
         curl -fsS -u "$${ARTIFACTORY_USER}:$${ARTIFACTORY_PASSWORD}" \
           -H "Content-Type: application/yaml" \
