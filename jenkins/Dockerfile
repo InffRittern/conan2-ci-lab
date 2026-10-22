@@ -19,4 +19,18 @@ RUN set -eux; \
         | tar -xz --strip-components=1 -C /usr/local/bin docker/docker; \
     docker --version
 
+# Toolchain and Conan used by the sandbox pipeline. Kept in the image so a
+# container recreation does not drop the CI dependencies.
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        -o Acquire::ForceIPv4=true \
+        ca-certificates cmake gcc-13 g++-13 ninja-build python3 python3-pip python3-venv; \
+    rm -rf /var/lib/apt/lists/*; \
+    python3 -m venv /opt/conan-venv; \
+    /opt/conan-venv/bin/pip install --no-cache-dir 'conan==2.33.0'; \
+    /opt/conan-venv/bin/conan --version
+
+ENV PATH="/opt/conan-venv/bin:${PATH}"
+
 USER jenkins

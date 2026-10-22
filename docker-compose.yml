@@ -5,7 +5,9 @@ networks:
 volumes:
   gitea_data:
   jenkins_home:
+  # Старый том OSS-установки оставлен для отката; CE работает на чистом томе.
   artifactory_data:
+  artifactory_ce_data:
   postgres_data:
   dind_data:
 
@@ -199,13 +201,42 @@ services:
 
 
   # =========================================================================
-  # JFROG ARTIFACTORY — Binary/Package Registry
-  # Conan / Docker / generic artifacts
-  # Версия: 7.161.26. Начиная с этой линейки требуется PostgreSQL
-  # (встроенная Derby больше не поддерживается).
+  # ARTIFACTORY DB INIT — отдельная БД для CE
+  # Старая БД artifactory инициализирована OSS и сохраняет OSS-лицензию даже
+  # при запуске CE-образа. CE получает чистую БД artifactory_ce.
+  # =========================================================================
+  artifactory-db-init:
+    image: postgres:18-alpine
+    container_name: artifactory-db-init
+    restart: "no"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      - PGPASSWORD=artifactory
+
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        exists=$$(psql -h postgres -U artifactory -d postgres -tAc \
+          "SELECT 1 FROM pg_database WHERE datname='artifactory_ce'")
+        if [ "$$exists" != "1" ]; then
+          createdb -h postgres -U artifactory artifactory_ce
+        fi
+
+    networks:
+      - ci_network
+
+  # =========================================================================
+  # JFROG ARTIFACTORY — Artifactory CE for C/C++ (Conan)
+  # Бесплатная редакция с поддержкой Conan-репозиториев (artifactory-oss
+  # Conan не поддерживает). Версия: 7.161.26; с этой линейки требуется
+  # PostgreSQL.
   # =========================================================================
   artifactory:
-    image: releases-docker.jfrog.io/jfrog/artifactory-oss:7.161.26
+    image: releases-docker.jfrog.io/jfrog/artifactory-cpp-ce:7.161.26
     container_name: artifactory
     restart: unless-stopped
 
@@ -221,16 +252,19 @@ services:
       # и был главным источником отказов запуска).
       - JF_SHARED_DATABASE_TYPE=postgresql
       - JF_SHARED_DATABASE_DRIVER=org.postgresql.Driver
-      - JF_SHARED_DATABASE_URL=jdbc:postgresql://postgres:5432/artifactory
+      - JF_SHARED_DATABASE_URL=jdbc:postgresql://postgres:5432/artifactory_ce
       - JF_SHARED_DATABASE_USERNAME=artifactory
       - JF_SHARED_DATABASE_PASSWORD=artifactory
+      - JF_JFCONNECT_ENABLED=false
 
     depends_on:
       postgres:
         condition: service_healthy
+      artifactory-db-init:
+        condition: service_completed_successfully
 
     volumes:
-      - artifactory_data:/var/opt/jfrog/artifactory
+      - artifactory_ce_data:/var/opt/jfrog/artifactory
 
     healthcheck:
       test:
@@ -242,6 +276,48 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
+
+    networks:
+      - ci_network
+
+  # =========================================================================
+  # ARTIFACTORY INIT — создание Conan-репозиториев
+  # Одноразовый контейнер: ждёт готовности Artifactory и идемпотентно создаёт
+  # local Conan repositories. packageType=Conan поддерживается только
+  # редакцией CE for C/C++.
+  # =========================================================================
+  artifactory-init:
+    image: curlimages/curl:8.12.1
+    container_name: artifactory-init
+    restart: "no"
+
+    depends_on:
+      artifactory:
+        condition: service_healthy
+
+    environment:
+      - ARTIFACTORY_URL=http://artifactory:8082
+      - ARTIFACTORY_USER=admin
+      - ARTIFACTORY_PASSWORD=${ARTIFACTORY_PASSWORD:-password}
+      - CONAN_REPOS=packages products develop
+
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        # REST /api/repositories requires Pro; CE supports repo management
+        # через PATCH /api/system/configuration (YAML). PATCH идемпотентен:
+        # существующие репозитории обновляются, отсутствующие создаются.
+        {
+          echo "localRepositories:"
+          for repo in $${CONAN_REPOS}; do
+            printf '  %s:\n    type: conan\n    description: Conan packages\n' "$${repo}"
+          done
+        } >/tmp/repos.yaml
+
+        curl -fsS -u "$${ARTIFACTORY_USER}:$${ARTIFACTORY_PASSWORD}" \
+          -H "Content-Type: application/yaml" \
+          -X PATCH "$${ARTIFACTORY_URL}/artifactory/api/system/configuration" \
+          --data-binary @/tmp/repos.yaml
 
     networks:
       - ci_network
