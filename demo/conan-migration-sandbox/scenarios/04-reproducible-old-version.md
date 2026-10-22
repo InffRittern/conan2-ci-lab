@@ -52,8 +52,8 @@ conan download \
 Имя remote в `-r` должно совпадать с ключом верхнего уровня в package list:
 `products-pipeline.sh` сохраняет список из `develop`, поэтому скачивание идёт
 из `develop`. Если нужен именно `products`, сначала создайте package list
-командой `conan list 'ap-product-a/1.0.0:*' -r=products --format=json --out-file=...`
-и используйте `-r=products`.
+командой `conan list 'ap-product-a/1.0.0:*#*' -r=products --format=json --out-file=...`
+и используйте `-r=products`. Без `#*` в списке не будет package revisions.
 
 ## 3. Восстановить граф по старому lockfile
 

@@ -89,6 +89,9 @@ remote `packages`, `products`, `develop` указывают на
 
 ### Текущее состояние Artifactory
 
+Исторический снимок исходного дерева репозиториев:
+[`initial-conditions.md`](initial-conditions.md).
+
 Source-структура Conan 1.x сохранена для истории миграции; demo пишет только
 в target-репозитории `packages`, `products` и `develop`. Ниже — целевая
 раскладка source-репозиториев:
@@ -201,6 +204,43 @@ bash scripts/products-pipeline.sh products/ap-product-b
 
 Полный пошаговый сценарий — `scenarios/01-basic-build.md`.
 
+### Staged CI: релиз без «рецепта без бинарников»
+
+Для CI используйте отдельные `ci-*` скрипты. Они не заменяют пошаговые
+`packages-pipeline.sh`/`products-pipeline.sh`, а реализуют релизный порядок:
+
+```bash
+# 1. библиотека: Release + Debug локально, затем полная публикация
+bash scripts/ci-package-release.sh libs/ap-headers 1.4.2
+
+# 2. продукты: один граф, один build-order, promote всего набора
+export CI_RESOLVE_REMOTE=products
+bash scripts/ci-products-release.sh --dry-run
+bash scripts/ci-products-release.sh
+bash scripts/ci-verify-release.sh
+```
+
+| Скрипт | Что гарантирует |
+|---|---|
+| `ci-package-release.sh <path> <version>` | рецепт не попадает в `packages` до сборки Release и Debug; package ID сверяются; опционально promote в `products` |
+| `ci-products-release.sh` | единый lockfile для `ap-product-a` и `ap-product-b`; сборка всего build-order; upload/promote только после успеха; манифест последним |
+| `ci-verify-release.sh` | все refs из `release-manifest.json` есть в `develop` и имеют бинарники |
+
+Единый граф задаётся в `ci/all-products/conanfile.py`. Он не публикуется;
+это только корень для `conan lock create` и `conan graph build-order`.
+
+Артефакты релиза:
+
+```text
+lockfiles/ci/all-products.lock
+lockfiles/ci/release-manifest.json
+lockfiles/ap-product-a/ap-product-a.lock
+lockfiles/ap-product-b/ap-product-b.lock
+```
+
+Подробные сценарии — `scenarios/05-staged-package-release.md` …
+`scenarios/08-conan1-to-conan2-cutover.md`.
+
 ### Важно про запуск в WSL/DrvFs
 
 Запускайте скрипты как `bash scripts/...`, а не `./scripts/...`: на DrvFs
@@ -211,7 +251,9 @@ bash scripts/products-pipeline.sh products/ap-product-b
 - `lockfiles/<product>/<product>.lock` — **коммитим**. Он фиксирует recipe
   revisions и версии графа.
 - `lockfiles/<product>/<product>-packagelist.json` — **коммитим**. Это результат
-  `conan list "<product>/*:*" -r=develop --format=json` после успешной сборки.
+  `conan list "<product>/*:*#*" -r=develop --format=json` после успешной
+  сборки. Шаблон `:*#*` обязателен: без него Conan не печатает package
+  revisions, и бинарник нельзя воспроизвести точно.
 
 Lockfile **не содержит** `package_id` и `package_rev` бинарных пакетов. Для
 полной воспроизводимости нужно знать не только «какой версии recipe», но и
@@ -229,8 +271,13 @@ lockfiles/ap-product-a/ap-product-a-1.0.0-packagelist.json
 Используйте их для воспроизведения старой версии, когда в `develop` уже
 появились новые библиотеки (см. `scenarios/04-reproducible-old-version.md`).
 
-Lockfile'ы в репозитории — результат прогона сценария 01. Повторный запуск
-`packages-pipeline.sh`/`products-pipeline.sh` перезаписывает рабочие
+`ci-products-release.sh` дополнительно пишет `lockfiles/ci/all-products.lock`
+(единый граф обоих продуктов) и `lockfiles/ci/release-manifest.json` —
+указатель полного релиза. Манифест создаётся последним; его наличие означает,
+что все refs были собраны и продвинуты.
+
+Lockfile'ы в репозитории — результат прогонов сценариев 01 и 05–06. Повторный
+запуск `packages-pipeline.sh`/`products-pipeline.sh`/`ci-*` перезаписывает рабочие
 `*.lock`, а для продуктов дополнительно сохраняет неизменяемые копии с
 версией в имени.
 
@@ -241,6 +288,10 @@ Lockfile'ы в репозитории — результат прогона сц
 | `bootstrap-remotes.sh` | Добавляет/обновляет 3 remote, логинится, ставит их перед `conancenter` |
 | `packages-pipeline.sh <path> <version>` | Release + Debug, lockfile на конфигурацию, merge, upload в `packages` |
 | `products-pipeline.sh <path>` | Единый lockfile, build-order по конфигурациям, merge, сборка, upload в `products`, promote в `develop`, package list |
+| `ci-package-release.sh <path> <version> [--no-promote]` | Staged-релиз библиотеки: обе конфигурации до upload, сверка package ID, promote в `products` |
+| `ci-products-release.sh [--dry-run] [--no-promote]` | Единый граф продуктов, merged build-order, сборка всего набора, promote в `develop` (с `--no-promote` — проверка в `products`), манифест последним |
+| `ci-verify-release.sh [manifest]` | Проверка всех refs и бинарников релиза в `develop` или `CI_VERIFY_REMOTE` |
+| `ci-lib.sh` | Общие функции: версии, пути, JSON-разбор, сверка package ID |
 | `promote.sh <ref-pattern> <src> <dst>` | `list → download → upload` вместо `conan art:promote` |
 | `scenario-major-bump.sh <pkg> <old> <new>` | Сборка новой версии, promote в products, попытка сборки продуктов |
 
@@ -248,15 +299,30 @@ Remote-имена настраиваются через `PACKAGES_REMOTE`, `PROD
 `DEVELOP_REMOTE`; URL Artifactory — через `ARTIFACTORY_URL` (по умолчанию
 `http://artifactory:8082`).
 
+## Сценарии
+
+| Сценарий | Тема |
+|---|---|
+| `01-basic-build.md` | базовая сборка и promote |
+| `02-breaking-change.md` | новая версия ломает зависимых |
+| `03-major-bump.md` | осознанный переход на major |
+| `04-reproducible-old-version.md` | старый продукт из lockfile + package list |
+| `05-staged-package-release.md` | публикация только полного пакета |
+| `06-unified-product-release.md` | единый граф продуктов и promote набора |
+| `07-major-prerelease.md` | политика major и pre-release |
+| `08-conan1-to-conan2-cutover.md` | cutover CI с Conan 1 на Conan 2 |
+
 ## Известные ограничения
 
 1. **`conan art:promote` недоступна** в Artifactory CE. Поэтому
    `promote.sh` делает `conan list` → `conan download` → `conan upload`.
    Операция идемпотентна, но не атомарна: при обрыве между download и upload
-   возможен частичный перенос.
+   возможен частичный перенос. `ci-products-release.sh` пишет
+   `release-manifest.json` последним и проверяет набор через
+   `ci-verify-release.sh`, но это указатель релиза, а не транзакция.
 2. **Lockfile не содержит `package_id`/`package_rev`.** Без package list нельзя
    гарантировать, что соберётся/скачается именно тот бинарник. Package list
-   коммитится рядом с lockfile.
+   коммитится рядом с lockfile и снимается с `:*#*`.
 3. **Artifactory CE for C/C++ — одна нода.** PostgreSQL уже используется, но
    для production нужны внешний backup/retention и HA-редакция Artifactory.
 4. `ap-box` использует `force=True` для `ap-headers/1.3.290`; это
@@ -273,16 +339,26 @@ Remote-имена настраиваются через `PACKAGES_REMOTE`, `PROD
    remote по умолчанию он может затенять `ap-base/1.0.0` из sandbox.
    `scripts/bootstrap-remotes.sh` ставит `packages`, `products`, `develop`
    перед `conancenter`; ручная настройка должна сохранять этот порядок.
+8. `conan graph build-order-merge --reduce` на заполненном кэше может вернуть
+   пустой `order`. `ci-products-release.sh` поэтому мержит без `--reduce` и
+   дедуплицирует refs сам.
+9. Pre-release по умолчанию не попадает в version range. Не добавляйте
+   `include_prerelease` в стабильные диапазоны продуктов; используйте
+   отдельный тестовый граф и явную версию.
 
 ## Как перенести в реальный CI
 
+- Использовать `ci-package-release.sh` для библиотек и
+  `ci-products-release.sh` для продуктов; старые `packages-pipeline.sh` /
+  `products-pipeline.sh` оставить только для пошаговых сценариев.
 - Заменить `promote.sh` на `conan art:promote` при переходе на Artifactory Pro.
-- Вынести lockfile и package list в артефакты CI (lockfile — вход для
-  reproducibility, package list — свидетельство содержимого).
-- Разнести `packages-pipeline.sh` и `products-pipeline.sh` по разным Jenkins
+- Вынести lockfile, package list и `release-manifest.json` в артефакты CI
+  (lockfile — вход для reproducibility, package list — свидетельство
+  содержимого, manifest — указатель релиза).
+- Разнести сборку библиотек и единый релиз продуктов по разным Jenkins
   job/агентам; передавать lockfile/package list как artifacts.
 - Собирать каждую конфигурацию на отдельном агенте и мержить build-order
-  (`conan graph build-order-merge`) перед запуском сборки.
+  (`conan graph build-order-merge` без `--reduce`) перед запуском сборки.
 - Для production использовать PostgreSQL для Gitea и Artifactory, включить
   backup/retention policy.
 - Не публиковать `latest`/перезаписывать immutable версии; для breaking change
@@ -294,15 +370,20 @@ Remote-имена настраиваются через `PACKAGES_REMOTE`, `PROD
 2. `python3 -m py_compile` для всех `conanfile.py`.
 3. `bash scripts/bootstrap-remotes.sh` — три remote и успешный login.
 4. Собрать библиотеки командами из быстрого старта; проверить
-   `conan list 'ap-base/*:*' -r=packages`.
+   `conan list 'ap-base/*:*#*' -r=packages`.
 5. `bash scripts/products-pipeline.sh products/ap-product-a`; проверить
-   `conan list 'ap-product-a/*:*' -r=develop` и наличие
+   `conan list 'ap-product-a/*:*#*' -r=develop` и наличие
    `lockfiles/ap-product-a/ap-product-a-packagelist.json`.
 6. Повторить для `ap-product-b`.
-7. Пройти `scenarios/01-basic-build.md` … `04-reproducible-old-version.md`.
-8. Для миграции хранилища выполнить
-   [`../../conan1-conan2-migration-runbook.md`](../../conan1-conan2-migration-runbook.md):
-   freeze, service account, TLS, backup, cutover и rollback.
+7. Staged-релиз: `ci-package-release.sh libs/ap-headers 1.4.2`, затем
+   `ci-products-release.sh --dry-run` и полный `ci-products-release.sh`;
+   проверить `release-manifest.json` и `ci-verify-release.sh`.
+8. Отрицательная проверка: сломать исходник в копии, убедиться, что
+   `release-manifest.json` не создан, а `develop` не изменился.
+9. Пройти `scenarios/01-basic-build.md` … `08-conan1-to-conan2-cutover.md`.
+10. Для миграции хранилища выполнить
+    [`../../conan1-conan2-migration-runbook.md`](../../conan1-conan2-migration-runbook.md):
+    freeze, service account, TLS, backup, cutover и rollback.
 
 ## Структура
 
@@ -324,18 +405,33 @@ conan-migration-sandbox/
 ├── profiles/
 │   ├── linux-gcc-release
 │   └── linux-gcc-debug
+├── ci/
+│   └── all-products/
+│       └── conanfile.py
 ├── scripts/
 │   ├── bootstrap-remotes.sh
 │   ├── packages-pipeline.sh
 │   ├── products-pipeline.sh
 │   ├── promote.sh
+│   ├── ci-lib.sh
+│   ├── ci-package-release.sh
+│   ├── ci-products-release.sh
+│   ├── ci-verify-release.sh
 │   └── scenario-major-bump.sh
 ├── lockfiles/
 │   ├── ap-product-a/
-│   └── ap-product-b/
+│   ├── ap-product-b/
+│   ├── packages/
+│   └── ci/
+│       ├── all-products.lock
+│       └── release-manifest.json
 └── scenarios/
     ├── 01-basic-build.md
     ├── 02-breaking-change.md
     ├── 03-major-bump.md
-    └── 04-reproducible-old-version.md
+    ├── 04-reproducible-old-version.md
+    ├── 05-staged-package-release.md
+    ├── 06-unified-product-release.md
+    ├── 07-major-prerelease.md
+    └── 08-conan1-to-conan2-cutover.md
 ```

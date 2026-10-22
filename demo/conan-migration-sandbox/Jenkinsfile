@@ -5,9 +5,10 @@ pipeline {
         PATH            = "/opt/conan-venv/bin:${env.PATH}"
         CONAN_USERNAME  = "admin"
         ARTIFACTORY_URL = "http://artifactory:8082"
-        PACKAGES_REMOTE = "packages"
-        PRODUCTS_REMOTE = "products"
-        DEVELOP_REMOTE  = "develop"
+        PACKAGES_REMOTE     = "packages"
+        PRODUCTS_REMOTE     = "products"
+        DEVELOP_REMOTE      = "develop"
+        CI_RESOLVE_REMOTE   = "products"
         CC              = "gcc-13"
         CXX             = "g++-13"
     }
@@ -33,14 +34,14 @@ pipeline {
                 withCredentials([string(credentialsId: 'artifactory-password', variable: 'CONAN_PASSWORD')]) {
                     sh '''
                         set -euo pipefail
-                        bash scripts/packages-pipeline.sh libs/ap-base 1.0.0
-                        bash scripts/packages-pipeline.sh libs/ap-headers 1.3.290
-                        bash scripts/packages-pipeline.sh libs/ap-headers 1.4.1
-                        bash scripts/packages-pipeline.sh libs/ap-utils 1.0.0
-                        bash scripts/packages-pipeline.sh libs/ap-gfx 1.0.0
-                        bash scripts/packages-pipeline.sh libs/ap-texture 1.0.0
-                        bash scripts/packages-pipeline.sh libs/ap-box 1.0.0
-                        bash scripts/packages-pipeline.sh libs/ap-sdk 1.0.0
+                        bash scripts/ci-package-release.sh libs/ap-base 1.0.0
+                        bash scripts/ci-package-release.sh libs/ap-headers 1.3.290
+                        bash scripts/ci-package-release.sh libs/ap-headers 1.4.1
+                        bash scripts/ci-package-release.sh libs/ap-utils 1.0.0
+                        bash scripts/ci-package-release.sh libs/ap-gfx 1.0.0
+                        bash scripts/ci-package-release.sh libs/ap-texture 1.0.0
+                        bash scripts/ci-package-release.sh libs/ap-box 1.0.0
+                        bash scripts/ci-package-release.sh libs/ap-sdk 1.0.0
                     '''
                 }
             }
@@ -51,8 +52,9 @@ pipeline {
                 withCredentials([string(credentialsId: 'artifactory-password', variable: 'CONAN_PASSWORD')]) {
                     sh '''
                         set -euo pipefail
-                        bash scripts/products-pipeline.sh products/ap-product-a
-                        bash scripts/products-pipeline.sh products/ap-product-b
+                        bash scripts/ci-products-release.sh --dry-run
+                        bash scripts/ci-products-release.sh
+                        bash scripts/ci-verify-release.sh
                     '''
                 }
             }
@@ -63,16 +65,9 @@ pipeline {
                 withCredentials([string(credentialsId: 'artifactory-password', variable: 'CONAN_PASSWORD')]) {
                     sh '''
                         set -euo pipefail
-                        for ref in \
-                            ap-base/1.0.0 ap-utils/1.0.0 ap-gfx/1.0.0 \
-                            ap-headers/1.3.290 ap-headers/1.4.1 \
-                            ap-texture/1.0.0 ap-box/1.0.0 \
-                            ap-sdk/1.0.0
-                        do
-                            conan list "${ref}:*" -r "$PACKAGES_REMOTE"
-                        done
-                        conan list 'ap-product-a/1.0.0:*' -r "$DEVELOP_REMOTE"
-                        conan list 'ap-product-b/1.0.0:*' -r "$DEVELOP_REMOTE"
+                        bash scripts/ci-verify-release.sh
+                        conan list 'ap-product-a/1.0.0:*#*' -r "$DEVELOP_REMOTE"
+                        conan list 'ap-product-b/1.0.0:*#*' -r "$DEVELOP_REMOTE"
                     '''
                 }
             }
@@ -81,7 +76,7 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts artifacts: 'lockfiles/**/*.lock,lockfiles/**/*packagelist.json', fingerprint: true, allowEmptyArchive: true
+            archiveArtifacts artifacts: 'lockfiles/**/*.lock,lockfiles/**/*packagelist.json,lockfiles/ci/release-manifest.json', fingerprint: true, allowEmptyArchive: true
         }
     }
 }

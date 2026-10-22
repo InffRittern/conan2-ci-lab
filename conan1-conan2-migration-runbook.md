@@ -374,6 +374,51 @@ conan upload "ap-headers/1.4.1:*" -r packages --confirm
 conan upload "recipe-demo/1.0.0:*" -r packages --confirm
 ```
 
+Для автоматизированного релиза не повторяйте эти команды вручную, а
+используйте staged-порядок из 7.3.
+
+### 7.3. Staged CI: релиз библиотек и продуктов
+
+Для CI не публикуйте рецепт до сборки всех конфигураций и не продвигайте
+продукты по одному. В sandbox для этого есть отдельные скрипты:
+
+```bash
+cd demo/conan-migration-sandbox
+
+# библиотеки: Release + Debug, затем полная публикация в packages/products
+bash scripts/ci-package-release.sh libs/ap-headers 1.3.290
+bash scripts/ci-package-release.sh libs/ap-headers 1.4.1
+bash scripts/ci-package-release.sh libs/ap-base 1.0.0
+bash scripts/ci-package-release.sh libs/ap-utils 1.0.0
+bash scripts/ci-package-release.sh libs/ap-gfx 1.0.0
+bash scripts/ci-package-release.sh libs/ap-texture 1.0.0
+bash scripts/ci-package-release.sh libs/ap-box 1.0.0
+bash scripts/ci-package-release.sh libs/ap-sdk 1.0.0
+
+# продукты: единый граф, один build-order, promote всего набора
+export CI_RESOLVE_REMOTE=products
+bash scripts/ci-products-release.sh --dry-run
+bash scripts/ci-products-release.sh
+bash scripts/ci-verify-release.sh
+```
+
+Почему так:
+
+- `ci-package-release.sh` загружает `name/version` только после успешной
+  сборки Release и Debug и сверяет package ID в `packages` и `products`;
+- `ci-products-release.sh` резолвит `ap-product-a` и `ap-product-b` одним
+  lockfile через `ci/all-products/conanfile.py`;
+- при падении любого продукта `develop` не меняется;
+- `release-manifest.json` пишется последним и является указателем релиза;
+- `ci-verify-release.sh` проверяет, что все refs и бинарники есть в
+  `develop`.
+
+Ограничение Artifactory CE: штатного `conan art:promote` нет, поэтому
+`promote.sh` не транзакционен. Манифест и проверка компенсируют это, но не
+делают promote атомарным. Подробные сценарии:
+[`05-staged-package-release.md`](demo/conan-migration-sandbox/scenarios/05-staged-package-release.md),
+[`06-unified-product-release.md`](demo/conan-migration-sandbox/scenarios/06-unified-product-release.md).
+
 ## 8. Проверка потребителя
 
 Используйте чистый home с **единственным** remote `conan2`:
@@ -415,9 +460,10 @@ Jenkins только запускает pipeline. Conan-пакеты в Jenkins 
 1. `checkout scm` — исходники из Gitea;
 2. credentials `artifactory-password` — пароль Artifactory, не Gitea;
 3. `conan remote login` в `conan2`;
-4. `conan create`/`conan install` с профилем и `--build=missing`;
-5. `conan upload` в `packages`/`products`/`develop`;
-6. lockfile и package list — в archiveArtifacts, но источник истины — JFrog.
+4. `ci-package-release.sh` для библиотек: обе конфигурации до upload;
+5. `ci-products-release.sh` для продуктов: единый граф и promote набора;
+6. `ci-verify-release.sh` и `release-manifest.json` — в archiveArtifacts;
+7. lockfile и package list — тоже артефакты, но источник истины — JFrog.
 
 Минимальный фрагмент Jenkinsfile:
 
@@ -432,14 +478,23 @@ stage('Build and publish') {
                   "\$ARTIFACTORY_URL/artifactory/api/conan/conan2" || true
                 conan remote login conan2 "\$ARTIFACTORY_USER" \
                   -p "\$ARTIFACTORY_PASSWORD"
-                conan create . --build=missing \
-                  -pr profiles/linux-gcc-release -r conan2
-                conan upload "ap-product-b/1.0.0:*" -r products --confirm
+
+                # библиотеки: полный пакет, затем staging в products
+                bash scripts/ci-package-release.sh libs/ap-base 1.0.0
+
+                # продукты: единый граф, build-order, promote всего набора
+                CI_RESOLVE_REMOTE=products \
+                  bash scripts/ci-products-release.sh
+                bash scripts/ci-verify-release.sh
             """
         }
     }
 }
 ```
+
+В реальном job выполните `ci-package-release.sh` для всех библиотек в порядке
+зависимостей до продуктового шага. Не публикуйте продукт отдельным
+`conan upload`, пока не собран весь набор.
 
 Не добавляйте в Jenkins шаг `conan upload` в Gitea и не передавайте
 Gitea-токен в Artifactory: это разные системы и разные credentials.
@@ -471,6 +526,9 @@ Rollback:
 - [ ] Target `packages`/`products`/`develop` созданы.
 - [ ] Virtual `conan2` агрегирует target.
 - [ ] Выполнена пересборка Conan 2 с `--build=missing`.
+- [ ] Библиотеки опубликованы через `ci-package-release.sh` (Release + Debug).
+- [ ] Продукты собраны единым графом и продвинуты через `ci-products-release.sh`.
+- [ ] `release-manifest.json` создан последним и проверен `ci-verify-release.sh`.
 - [ ] Новые бинарники загружены в target.
 - [ ] Чистый consumer скачал всё через `conan2`, без source.
 - [ ] Rollback проверен; source не удалён.

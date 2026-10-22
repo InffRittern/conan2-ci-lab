@@ -203,7 +203,7 @@ bash "$ROOT_DIR/scripts/promote.sh" \
     "$DEVELOP_REMOTE"
 
 echo "=== Saving package list for ${product_name}/${version} ==="
-conan list "$product_name/$version:*" \
+conan list "$product_name/$version:*#*" \
     -r "$DEVELOP_REMOTE" \
     --format=json \
     --out-file "$lock_dir/$product_name-packagelist.json"
