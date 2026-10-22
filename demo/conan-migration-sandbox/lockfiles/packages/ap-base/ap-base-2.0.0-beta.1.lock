@@ -1,0 +1,9 @@
+{
+    "version": "0.5",
+    "requires": [
+        "ap-base/2.0.0-beta.1#1772b6768072280a821493a99140e150%1792686352.700847"
+    ],
+    "build_requires": [],
+    "python_requires": [],
+    "config_requires": []
+}

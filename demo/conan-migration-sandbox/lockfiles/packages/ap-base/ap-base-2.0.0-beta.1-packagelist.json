@@ -1,0 +1,57 @@
+{
+    "packages": {
+        "ap-base/2.0.0-beta.1": {
+            "revisions": {
+                "1772b6768072280a821493a99140e150": {
+                    "timestamp": 1792686357.429,
+                    "packages": {
+                        "87bbb286a7517318e730f10181ac32c50f1dbc94": {
+                            "revisions": {
+                                "1e523264c62df60124c02d7624ba2a53": {
+                                    "timestamp": 1792686357.557
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Release",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                }
+                            }
+                        },
+                        "3eb09c26f74052640128a3fbc8b68ebf3546fcd9": {
+                            "revisions": {
+                                "5b2f0d8a1399c7f728fc3003779d048d": {
+                                    "timestamp": 1792686357.494
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Debug",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

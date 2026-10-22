@@ -8,5 +8,5 @@ int ap_gfx_pixels(int width, int height) {
 }
 
 int ap_gfx_score(int seed) {
-    return ap_utils_checksum(seed) + ap_base_add(seed, 1);
+    return ap_utils_checksum(seed) + ap_base_add(seed, 1, 0);
 }

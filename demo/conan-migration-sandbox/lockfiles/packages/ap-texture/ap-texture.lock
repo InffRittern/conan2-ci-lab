@@ -1,8 +1,8 @@
 {
     "version": "0.5",
     "requires": [
-        "ap-texture/1.0.0#70e1f8b85ef34c947a341c2c01c65b01%1792681148.3548436",
-        "ap-headers/1.4.1#39dcfd866b758dcbe0391feb8e26b226%1792681142.236831"
+        "ap-texture/1.0.0#70e1f8b85ef34c947a341c2c01c65b01%1792686124.190753",
+        "ap-headers/1.4.1#39dcfd866b758dcbe0391feb8e26b226%1792686121.6529803"
     ],
     "build_requires": [],
     "python_requires": [],

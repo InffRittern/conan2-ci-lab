@@ -2,7 +2,7 @@
 
 Документ описывает миграцию Conan-хранилища в JFrog Artifactory CE.
 Проверено на Artifactory CE `7.161.26`, Conan 1.66.0 и Conan 2.33.0,
-Linux/GCC 13.
+Linux/GCC 13; сценарии `01–08` демонстрационного стенда пройдены.
 
 Артефакты Conan хранятся только в JFrog Artifactory. Gitea используется
 только как Git-хостинг исходников, Jenkins — только как CI/CD runner.
@@ -33,8 +33,10 @@ SCM не переносятся.
 
 Обозначения:
 
-- **source** — Conan 1-репозитории `conan-local`, `ap-source`,
-  `conan-thirdparty`, `ap-thirdparty`, объединённые virtual `conan`;
+- **source** — Conan 1: LOCAL `conan-local`, `ap`, `ap-thirdparty`; VIRTUAL
+  `conan-ap` (агрегирует `ap`), `conan-thirdparty` (агрегирует
+  `ap-thirdparty`) и корневой `conan` (`conan-local`, `ap`, `ap-thirdparty`,
+  `conan-remote` — ConanCenter);
 - **target** — Conan 2-репозитории `packages`, `products`, `develop`,
   объединённые virtual `conan2`;
 - **pref** — точная ссылка `name/version#recipe_revision:package_id`;
@@ -78,7 +80,7 @@ $CONAN1 --version
 Добавьте source-remotes и войдите:
 
 ```bash
-for r in conan-local ap-source conan-thirdparty ap-thirdparty conan; do
+for r in conan-local ap ap-thirdparty conan-ap conan-thirdparty conan; do
   $CONAN1 remote add "$r" \
     "$ARTIFACTORY_URL/artifactory/api/conan/$r"
   $CONAN1 user -p "$ARTIFACTORY_PASSWORD" -r "$r" "$ARTIFACTORY_USER"
@@ -88,20 +90,43 @@ done
 Снимите inventory:
 
 ```bash
-for r in conan-local ap-source conan-thirdparty ap-thirdparty conan; do
+for r in conan-local ap ap-thirdparty conan-ap conan-thirdparty conan; do
   echo "== $r"
-  $CONAN1 search "*" --revisions -r "$r"
+  $CONAN1 search "*" -r "$r"
 done > /tmp/conan1-inventory.txt
+
+# Conan 1.66: wildcard с --revisions завершается ошибкой.
+# Ревизии снимайте только по конкретному ref.
+# Список refs возьмите из вывода search; ниже — пример для стенда:
+for ref in 'ap/1.0.0@' 'ap-thirdparty/1.0.0@'; do
+  for r in ap ap-thirdparty conan-ap conan-thirdparty conan; do
+    echo "== $ref --revisions -r $r"
+    $CONAN1 search "$ref" --revisions -r "$r"
+  done
+done >> /tmp/conan1-inventory.txt
 ```
 
-Если нужен полный список всех версий и ревизий, используйте JSON:
+`conan search "*" -r conan` включает ConanCenter через `conan-remote`;
+для source-инвентаря используйте локальные/virtual source-репозитории и
+явные refs.
+
+Для машинной сверки JSON снимайте по конкретному ref; wildcard с
+`--revisions` в 1.66 не работает:
 
 ```bash
-$CONAN1 search "*" --revisions --json /tmp/conan1-all.json
+$CONAN1 search 'ap/1.0.0@' --revisions --json /tmp/ap-revisions.json -r ap
 ```
 
-Важно: `conan search` без `--revisions` не даёт полной картины; для миграции
-нужны именно recipe revisions и package ID.
+`conan search ref` даёт package ID, `--revisions` — recipe revision.
+Package revision в этом выводе не показывается: для переноса используйте
+manifest/pref из кэша (раздел 6).
+
+Пример фактического inventory стенда:
+
+```text
+ap/1.0.0             rrev 94b5374a94ac677865de5094132c484a  pkg 3dcaac93f3cf6432dc25ae41cd21792a9760e18b
+ap-thirdparty/1.0.0  rrev 8861c4b019a9721e437350de4738b5de  pkg 3dcaac93f3cf6432dc25ae41cd21792a9760e18b
+```
 
 ## 3. Сборка source-пакетов
 
@@ -118,8 +143,10 @@ ap-box
 ap-sdk
 ap-product-a
 ap-product-b
-recipe-demo
 ```
+
+Если в вашем хозяйстве есть отдельные recipe-only репозитории, добавьте их
+в конец порядка.
 
 Пример:
 
@@ -145,7 +172,11 @@ AP_HEADERS_VERSION=1.4.1 \
 Проверка локального кэша:
 
 ```bash
-$CONAN1 search "*" --revisions
+$CONAN1 search "*"
+
+# ревизии — только по конкретному ref
+$CONAN1 search 'ap-base/1.0.0@' --revisions
+$CONAN1 search 'ap-headers/1.3.290@' --revisions
 ```
 
 ## 4. Загрузка source-пакетов
@@ -156,8 +187,8 @@ $CONAN1 search "*" --revisions
 upload_pref() {
   repo="$1"
   ref="$2"
-  line=$($CONAN1 search "$ref" --revisions | grep "^$ref#" | head -1)
-  rrev=${line#*#}
+  rrev=$($CONAN1 search "$ref" --revisions | grep -oE '#[0-9a-f]{32}' | head -1 | tr -d '#')
+  [ -n "$rrev" ] || { echo "no revision: $ref" >&2; return 1; }
   base="$CONAN_USER_HOME/.conan/data/${ref%/*}/${ref#*/}/_/_/package"
 
   for pkgid in $(find "$base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'); do
@@ -167,25 +198,28 @@ upload_pref() {
   done
 }
 
-upload_pref conan-thirdparty ap-headers/1.3.290
-upload_pref conan-thirdparty ap-headers/1.4.1
-upload_pref ap-source ap-base/1.0.0
-upload_pref ap-source ap-utils/1.0.0
-upload_pref ap-source ap-gfx/1.0.0
-upload_pref ap-source ap-texture/1.0.0
-upload_pref ap-source ap-box/1.0.0
-upload_pref ap-source ap-sdk/1.0.0
+upload_pref ap-thirdparty ap-headers/1.3.290
+upload_pref ap-thirdparty ap-headers/1.4.1
+upload_pref ap ap-base/1.0.0
+upload_pref ap ap-utils/1.0.0
+upload_pref ap ap-gfx/1.0.0
+upload_pref ap ap-texture/1.0.0
+upload_pref ap ap-box/1.0.0
+upload_pref ap ap-sdk/1.0.0
 upload_pref conan-local ap-product-a/1.0.0
 upload_pref conan-local ap-product-b/1.0.0
-upload_pref conan-local recipe-demo/1.0.0
 ```
+
+Загружайте в LOCAL `ap`/`ap-thirdparty`; virtual `conan-ap` и
+`conan-thirdparty` только агрегируют их для чтения.
 
 Проверка:
 
 ```bash
-$CONAN1 search "*" -r ap-source
-$CONAN1 search "*" -r conan-thirdparty
+$CONAN1 search "*" -r ap
+$CONAN1 search "*" -r ap-thirdparty
 $CONAN1 search "*" -r conan-local
+$CONAN1 search 'ap/1.0.0@' --revisions -r conan-ap
 ```
 
 Для virtual `conan` нужен `CONAN_REVISIONS_ENABLED=1`; без него Conan 1
@@ -236,21 +270,39 @@ curl -u "$ARTIFACTORY_USER:$ARTIFACTORY_PASSWORD" \
   "$ARTIFACTORY_URL/artifactory/api/repositories"
 ```
 
-`conan-remote-cache` вручную не создавайте: Artifactory CE отклоняет
-remote с суффиксом `-cache`. Кэш обслуживается Artifactory автоматически.
+`conan-remote-cache` вручную не создавайте: это не отдельный API-репозиторий,
+а узел кэша remote в UI Artifactory. В `/api/repositories` его нет; кэш
+обслуживается Artifactory автоматически.
 
-## 6. Перенос точных pref в target
+В Artifactory CE `DELETE /api/repositories/<key>` возвращает HTTP 400
+(удаление репозитория — Pro-only). Временные репозитории удаляйте через
+PATCH конфигурации:
 
-Этот шаг переносит исходные бинарники и рецепты. Он нужен для аудита и
-rollback, но **не заменяет пересборку** под Conan 2: package ID Conan 2
-отличается.
+```yaml
+localRepositories:
+  temp-repo: null
+virtualRepositories:
+  temp-virtual: null
+```
+
+Для аудита при необходимости создайте отдельный LOCAL-репозиторий, например
+`legacy` (раздел 6).
+
+## 6. Перенос точных pref в audit-репозиторий (опционально)
+
+Этот шаг переносит исходные бинарники и рецепты в отдельный LOCAL-репозиторий
+`legacy` для аудита и rollback. **Не загружайте их в `packages`/`products`**:
+legacy-рецепт может стать latest и перекрыть Conan 2-рецепт. Для чистого
+cutover раздел можно пропустить — source остаётся архивом. Перенос **не
+заменяет пересборку** под Conan 2: package ID Conan 2 отличается.
 
 ```bash
 export CONAN_HOME=/tmp/conan2-home
+export LEGACY_REPO=legacy
 rm -rf "$CONAN_HOME"
 conan profile detect --force
 
-for r in conan conan-local ap-source conan-thirdparty packages products; do
+for r in conan conan-local ap ap-thirdparty conan-ap conan-thirdparty "$LEGACY_REPO"; do
   conan remote add -f "$r" \
     "$ARTIFACTORY_URL/artifactory/api/conan/$r"
   conan remote login "$r" "$ARTIFACTORY_USER" -p "$ARTIFACTORY_PASSWORD"
@@ -265,39 +317,54 @@ Manifest `source_repo|ref|rrev|pkgid` можно получить из Conan 1-�
 emit() {
   repo="$1"; shift
   for ref in "$@"; do
-    line=$($CONAN1 search "$ref" --revisions | grep "^$ref#" | head -1)
-    rrev=${line#*#}
+    rrev=$($CONAN1 search "$ref" --revisions | grep -oE '#[0-9a-f]{32}' | head -1 | tr -d '#')
+    [ -n "$rrev" ] || { echo "no revision: $ref" >&2; return 1; }
     base="$CONAN_USER_HOME/.conan/data/${ref%/*}/${ref#*/}/_/_/package"
     for pkgid in $(find "$base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'); do
       echo "$repo|$ref|$rrev|$pkgid" >> /tmp/legacy-prefs.txt
     done
   done
 }
-emit conan-thirdparty ap-headers/1.3.290 ap-headers/1.4.1
-emit ap-source ap-base/1.0.0 ap-utils/1.0.0 ap-gfx/1.0.0 \
+emit ap-thirdparty ap-headers/1.3.290 ap-headers/1.4.1
+emit ap ap-base/1.0.0 ap-utils/1.0.0 ap-gfx/1.0.0 \
   ap-texture/1.0.0 ap-box/1.0.0 ap-sdk/1.0.0
-emit conan-local ap-product-a/1.0.0 ap-product-b/1.0.0 recipe-demo/1.0.0
+emit conan-local ap-product-a/1.0.0 ap-product-b/1.0.0
 ```
 
-Перенос:
+Перенос должен выполнять Conan 1: Conan 2 не загружает старые Conan 1-рецепты
+с `from conans import ConanFile` (`ImportError: cannot import name
+'ConanFile' from 'conans'`), причём команда может вернуть exit code `0`.
+Настройте audit-remote в Conan 1:
 
 ```bash
-export CONAN_HOME=/tmp/conan2-home
+$CONAN1 remote add -f "$LEGACY_REPO" \
+  "$ARTIFACTORY_URL/artifactory/api/conan/$LEGACY_REPO"
+$CONAN1 user -p "$ARTIFACTORY_PASSWORD" -r "$LEGACY_REPO" "$ARTIFACTORY_USER"
 
 while IFS='|' read -r repo ref rrev pkgid; do
-  case "$ref" in
-    ap-product-a/1.0.0|ap-product-b/1.0.0) target=products ;;
-    *) target=packages ;;
-  esac
-
-  conan download "$ref#$rrev:$pkgid" -r "$repo"
-  conan upload "$ref#$rrev:$pkgid" -r "$target" --confirm
+  $CONAN1 upload "$ref#$rrev:$pkgid" -r "$LEGACY_REPO" --all --confirm
 done < /tmp/legacy-prefs.txt
 ```
 
-Ограничение стенда: `conan list "ref:*" -r <source>` может показать
+Проверка Conan 2 (точный pref скачивается, хотя `conan list` может показать
+`No packages found`):
+
+```bash
+conan download \
+  "ap/1.0.0#94b5374a94ac677865de5094132c484a:3dcaac93f3cf6432dc25ae41cd21792a9760e18b" \
+  -r "$LEGACY_REPO"
+```
+
+`conan download` точного pref из Conan 1-репозитория в Conan 2-кэш работает;
+проверено на `ap/1.0.0#94b5374...:3dcaac93...`. Это только аудит/rollback:
+рецепт остаётся Conan 1 (`from conans import ConanFile`), поэтому для сборки
+нужен пересобранный Conan 2-рецепт.
+
+Ограничение стенда: `conan list "ref:*" -r <repo>` может показать
 `No packages found`, хотя точный `conan download` работает. Не считайте
 пустой список доказательством отсутствия пакета; сверяйтесь с manifest.
+Кроме того, в Conan 2 `conan list` при HTTP 404 возвращает exit code `0`:
+проверяйте JSON (`error`) или текст ответа, а не только код возврата.
 
 ## 7. Пересборка под Conan 2
 
@@ -326,13 +393,26 @@ tools.cmake.cmaketoolchain:generator=Ninja
 conan profile show -pr=profiles/linux-gcc-release
 ```
 
+Для cutover используйте отдельный чистый `CONAN_HOME`. Conan сначала
+разрешает version range по локальному кэшу: оставшийся после негативного
+теста `ap-base/1.9.9` был выбран для `[>=1 <2]` и сломал сборку `ap-utils`.
+Удаляйте такие refs (`conan remove 'ap-base/1.9.9' -c`) или начинайте с
+нового home.
+
 ### 7.2. Сборка и загрузка
 
 ```bash
-export CONAN_HOME=/tmp/conan2-home
+export CONAN_HOME=/tmp/conan2-rebuild
+rm -rf "$CONAN_HOME"
+conan profile detect --force
 conan remote add -f conan2 \
   "$ARTIFACTORY_URL/artifactory/api/conan/conan2"
 conan remote login conan2 "$ARTIFACTORY_USER" -p "$ARTIFACTORY_PASSWORD"
+
+# локальные remotes для upload; conan2 — только virtual-агрегатор
+export CONAN_USERNAME="$ARTIFACTORY_USER"
+export CONAN_PASSWORD="$ARTIFACTORY_PASSWORD"
+bash scripts/bootstrap-remotes.sh
 
 conan install --requires=ap-product-b/1.0.0 \
   -r conan2 --build=missing \
@@ -347,16 +427,10 @@ conan install --requires=ap-product-a/1.0.0 \
 conan install --requires=ap-headers/1.4.1 \
   -r conan2 --build=missing \
   -pr profiles/linux-gcc-release
-
-# самостоятельный recipe-репозиторий
-cd /workspace/recipe-demo-git
-conan create . --build=missing -pr profiles/linux-gcc-release
 ```
 
 Почему `--build=missing`: Conan 2 вычисляет другие package ID. Без пересборки
-consumer получает `Missing binary` даже после переноса старых файлов. Если
-`recipe-demo` — отдельный репозиторий, путь `/workspace/recipe-demo-git`
-замените на свой.
+consumer получает `Missing binary` даже после переноса старых файлов.
 
 Загрузите новые бинарники:
 
@@ -371,6 +445,15 @@ conan upload "ap-box/1.0.0:*" -r packages --confirm
 conan upload "ap-sdk/1.0.0:*" -r packages --confirm
 conan upload "ap-headers/1.3.290:*" -r packages --confirm
 conan upload "ap-headers/1.4.1:*" -r packages --confirm
+```
+
+Опционально проверьте отдельный recipe-only fixture `../recipe-demo`:
+
+```bash
+(
+  cd ../recipe-demo
+  conan create . --build=missing -pr profiles/linux-gcc-release
+)
 conan upload "recipe-demo/1.0.0:*" -r packages --confirm
 ```
 
@@ -395,29 +478,57 @@ bash scripts/ci-package-release.sh libs/ap-texture 1.0.0
 bash scripts/ci-package-release.sh libs/ap-box 1.0.0
 bash scripts/ci-package-release.sh libs/ap-sdk 1.0.0
 
+# на чистом target: рецепты продуктов должны быть в products до dry-run,
+# иначе version range ap-product-* не разрешится.
+# Если рецепты уже там, не переэкспортируйте их без необходимости.
+conan export products/ap-product-a
+conan export products/ap-product-b
+conan upload "ap-product-a/1.0.0" -r products -c --only-recipe
+conan upload "ap-product-b/1.0.0" -r products -c --only-recipe
+
 # продукты: единый граф, один build-order, promote всего набора
 export CI_RESOLVE_REMOTE=products
 bash scripts/ci-products-release.sh --dry-run
 bash scripts/ci-products-release.sh
 bash scripts/ci-verify-release.sh
+
+# pre-release: только packages, без promote в products
+bash scripts/ci-package-release.sh libs/ap-base 2.0.0-beta.1 --no-promote
 ```
+
+Пустой `products` на старте — нормальная ситуация для чистого cutover:
+`ci-products-release.sh` строит граф из `ci/all-products/conanfile.py`, где
+продукты заданы version range. Пока их рецептов нет в resolve-remote,
+`conan lock create` завершается ошибкой
+`Package 'ap-product-a/[>=1.0 <2]' not resolved`. Поэтому сначала
+выгружаются только рецепты (`--only-recipe`), а бинарники — уже единым
+релизом.
+
+Pre-release (`2.0.0-beta.1`) остаётся в `packages`: `--no-promote` не
+продвигает его в `products`. Диапазон `[>=1 <2]` такую версию не выбирает;
+для проверки нужен явный ref или lock.
 
 Почему так:
 
 - `ci-package-release.sh` загружает `name/version` только после успешной
   сборки Release и Debug и сверяет package ID в `packages` и `products`;
 - `ci-products-release.sh` резолвит `ap-product-a` и `ap-product-b` одним
-  lockfile через `ci/all-products/conanfile.py`;
+  lockfile через `ci/all-products/conanfile.py`; рецепты продуктов должны
+  уже существовать в resolve-remote;
 - при падении любого продукта `develop` не меняется;
 - `release-manifest.json` пишется последним и является указателем релиза;
 - `ci-verify-release.sh` проверяет, что все refs и бинарники есть в
-  `develop`.
+  `develop`;
+- при breaking change major обновляйте диапазоны потребителей
+  (`[>=1 <2]` → `[>=2 <3]`) и пересобирайте всю цепочку; старые продукты
+  остаются воспроизводимыми через lock + package list.
 
 Ограничение Artifactory CE: штатного `conan art:promote` нет, поэтому
 `promote.sh` не транзакционен. Манифест и проверка компенсируют это, но не
 делают promote атомарным. Подробные сценарии:
 [`05-staged-package-release.md`](demo/conan-migration-sandbox/scenarios/05-staged-package-release.md),
-[`06-unified-product-release.md`](demo/conan-migration-sandbox/scenarios/06-unified-product-release.md).
+[`06-unified-product-release.md`](demo/conan-migration-sandbox/scenarios/06-unified-product-release.md),
+[`08-conan1-to-conan2-cutover.md`](demo/conan-migration-sandbox/scenarios/08-conan1-to-conan2-cutover.md).
 
 ## 8. Проверка потребителя
 
@@ -437,6 +548,29 @@ conan install --requires=ap-product-b/1.0.0 \
 ```
 
 Ожидаемо: все пакеты графа скачиваются из `conan2`, без source-URL.
+
+Для старого продукта из `develop` добавьте remote в тот же чистый home:
+
+```bash
+conan remote add -f develop \
+  "$ARTIFACTORY_URL/artifactory/api/conan/develop"
+conan remote login develop "$ARTIFACTORY_USER" -p "$ARTIFACTORY_PASSWORD"
+
+conan download \
+  --list=lockfiles/ap-product-a/ap-product-a-packagelist.json \
+  -r develop
+
+conan install products/ap-product-a \
+  -pr:h profiles/linux-gcc-release \
+  -pr:b profiles/linux-gcc-release \
+  -s build_type=Release \
+  --lockfile lockfiles/ap-product-a/ap-product-a.lock \
+  --build=never
+```
+
+Package list должен быть снят с `:*#*` и содержать `package_rev`; иначе
+`conan download` не восстановит точный бинарник. Проверено в чистом home.
+
 Для полной проверки соберите приложение:
 
 ```bash
@@ -459,11 +593,14 @@ Jenkins только запускает pipeline. Conan-пакеты в Jenkins 
 
 1. `checkout scm` — исходники из Gitea;
 2. credentials `artifactory-password` — пароль Artifactory, не Gitea;
-3. `conan remote login` в `conan2`;
+3. `conan remote login` в `conan2` и `bootstrap-remotes.sh` для
+   `packages`/`products`/`develop`;
 4. `ci-package-release.sh` для библиотек: обе конфигурации до upload;
-5. `ci-products-release.sh` для продуктов: единый граф и promote набора;
-6. `ci-verify-release.sh` и `release-manifest.json` — в archiveArtifacts;
-7. lockfile и package list — тоже артефакты, но источник истины — JFrog.
+5. `conan export` + `conan upload --only-recipe` для продуктов, если их
+   рецептов ещё нет в `products`;
+6. `ci-products-release.sh` для продуктов: единый граф и promote набора;
+7. `ci-verify-release.sh` и `release-manifest.json` — в archiveArtifacts;
+8. lockfile и package list — тоже артефакты, но источник истины — JFrog.
 
 Минимальный фрагмент Jenkinsfile:
 
@@ -474,13 +611,26 @@ stage('Build and publish') {
                                  variable: 'ARTIFACTORY_PASSWORD')]) {
             sh """
                 export CONAN_HOME="\$WORKSPACE/.conan2"
+                rm -rf "\$CONAN_HOME"
+                conan profile detect --force
                 conan remote add -f conan2 \
                   "\$ARTIFACTORY_URL/artifactory/api/conan/conan2" || true
                 conan remote login conan2 "\$ARTIFACTORY_USER" \
                   -p "\$ARTIFACTORY_PASSWORD"
 
+                # локальные remotes для upload
+                export CONAN_USERNAME="\$ARTIFACTORY_USER"
+                export CONAN_PASSWORD="\$ARTIFACTORY_PASSWORD"
+                bash scripts/bootstrap-remotes.sh
+
                 # библиотеки: полный пакет, затем staging в products
                 bash scripts/ci-package-release.sh libs/ap-base 1.0.0
+
+                # на чистом target: рецепты продуктов до единого графа
+                conan export products/ap-product-a
+                conan export products/ap-product-b
+                conan upload "ap-product-a/1.0.0" -r products -c --only-recipe
+                conan upload "ap-product-b/1.0.0" -r products -c --only-recipe
 
                 # продукты: единый граф, build-order, promote всего набора
                 CI_RESOLVE_REMOTE=products \
@@ -491,6 +641,9 @@ stage('Build and publish') {
     }
 }
 ```
+
+Фрагмент предполагает чистый target: если рецепты продуктов уже есть в
+`products`, шаг `conan export`/`--only-recipe` можно убрать.
 
 В реальном job выполните `ci-package-release.sh` для всех библиотек в порядке
 зависимостей до продуктового шага. Не публикуйте продукт отдельным
@@ -511,37 +664,72 @@ Gitea-токен в Artifactory: это разные системы и разн�
 
 Rollback:
 
-- верните remote URL на source `conan` (или `conan-local`/`ap-source`);
+- верните remote URL на source `conan` (или `conan-local`/`ap`);
 - не удаляйте target `packages`/`products`/`develop` до завершения проверки;
 - не удаляйте Gitea и Jenkins: они не участвуют в миграции хранилища;
 - при необходимости восстановите Artifactory из backup БД и filestore.
+
+Для репетиции baseline не запускайте его поверх уже заполненного target:
+диапазоны `[>=1 <2]` могут выбрать более поздний несовместимый 1.x. Используйте
+отдельные target-репозитории (`packages-08`, `products-08`, `develop-08`) или
+фиксированный lock, а production target не трогайте до проверки.
+
+Старый продукт восстанавливается не по `latest`, а по lockfile + package list
+из `develop` с `--build=never` (раздел 8).
 
 ## 11. Чек-лист
 
 - [ ] Есть backup Artifactory (БД + filestore).
 - [ ] Source заморожен; новые публикации остановлены.
 - [ ] Conan 1 home изолирован; `CONAN_REVISIONS_ENABLED=1`.
-- [ ] Инвентарь source содержит recipe revisions и package ID.
-- [ ] Source-пакеты загружены точными pref.
+- [ ] Инвентарь source содержит recipe revisions и package ID; package
+      revisions сохранены, если нужен точный rollback.
+- [ ] Source-пакеты сохранены точными pref в `legacy`, если нужен аудит.
 - [ ] Target `packages`/`products`/`develop` созданы.
 - [ ] Virtual `conan2` агрегирует target.
+- [ ] Для cutover используется чистый `CONAN_HOME`; failed/negative refs
+      удалены из кэша.
 - [ ] Выполнена пересборка Conan 2 с `--build=missing`.
 - [ ] Библиотеки опубликованы через `ci-package-release.sh` (Release + Debug).
+- [ ] На чистом target рецепты продуктов выгружены в `products` до
+      `ci-products-release.sh`.
 - [ ] Продукты собраны единым графом и продвинуты через `ci-products-release.sh`.
+- [ ] Pre-release опубликован только в `packages` (`--no-promote`), не в
+      `products`.
 - [ ] `release-manifest.json` создан последним и проверен `ci-verify-release.sh`.
 - [ ] Новые бинарники загружены в target.
 - [ ] Чистый consumer скачал всё через `conan2`, без source.
+- [ ] Старый продукт установлен из lockfile + package list с `--build=never`.
+- [ ] Отсутствие пакета проверено по JSON, а не по exit code `conan list`.
+- [ ] Временные target-репозитории удалены через PATCH; каноническая
+      топология восстановлена.
 - [ ] Rollback проверен; source не удалён.
 - [ ] Документация и inventory обновлены.
 
 ## 12. Известные ограничения
 
 1. Package ID Conan 1 и Conan 2 не совпадают; пересборка обязательна.
-2. `conan list` по source Conan 1 может не показывать бинарники; используйте
-   точный pref/manifest.
-3. `conan-remote-cache` не создаётся как отдельный remote с суффиксом
-   `-cache`.
-4. `artifactory-build-info` — служебный репозиторий, не Conan.
-5. `ap-thirdparty` может остаться пустым, если нет подтверждённой карты
-   пакетов.
-6. Virtual-репозиторий `conan2` обязателен для межрепозиторных зависимостей.
+2. В Conan 1.66 `conan search "*" --revisions` завершается ошибкой
+   `With --revision, specify a reference`. Ревизии снимайте только по
+   конкретному ref; package revision в выводе `search` не показывается.
+3. `conan list` по source Conan 1 может не показывать бинарники; используйте
+   точный pref/manifest. При HTTP 404 `conan list` в Conan 2 возвращает
+   exit code `0` — проверяйте JSON. `conan upload` Conan 1-рецепта в Conan 2
+   падает с `ImportError: cannot import name 'ConanFile' from 'conans'`,
+   но тоже может вернуть `0`; проверяйте вывод.
+4. `conan-remote-cache` — узел кэша remote в UI, а не API-репозиторий; в
+   `/api/repositories` его нет.
+5. `artifactory-build-info` — зарезервированное имя; PATCH возвращает 400,
+   создать его как обычный репозиторий нельзя.
+6. Artifactory CE не удаляет репозитории через `DELETE
+   /api/repositories/<key>` (400, Pro-only); используйте PATCH с `null`.
+7. `ap-thirdparty` может остаться пустым, если нет подтверждённой карты
+   пакетов; на стенде он заполнен placeholder `ap-thirdparty/1.0.0`.
+8. Локальный кэш участвует в разрешении version range: failed ref
+   (`ap-base/1.9.9`) может быть выбран для `[>=1 <2]` и сломать сборку.
+9. Baseline поверх заполненного target может разрешить более поздний
+   несовместимый 1.x; для репетиции нужны отдельные target-репозитории или
+   фиксированный lock.
+10. Legacy pref в `legacy` — только аудит/rollback; не смешивайте его с
+    `packages`/`products`, иначе Conan 2 может выбрать старый рецепт.
+11. Virtual-репозиторий `conan2` обязателен для межрепозиторных зависимостей.

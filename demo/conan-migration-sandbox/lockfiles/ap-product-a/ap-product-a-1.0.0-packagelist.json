@@ -3,9 +3,107 @@
         "ap-product-a/1.0.0": {
             "revisions": {
                 "29503652ed5e8e2c54c97c789fd79a81": {
-                    "timestamp": 1792681160.998,
+                    "timestamp": 1792685989.624,
                     "packages": {
+                        "67a12dcd16454b8c1ee75132990aafdb2cbcb55c": {
+                            "revisions": {
+                                "fc55be15064eacbe643e2b8d5bc89e6b": {
+                                    "timestamp": 1792686158.497
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Debug",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                },
+                                "requires": [
+                                    "ap-base/2.0.Z",
+                                    "ap-box/1.0.Z",
+                                    "ap-gfx/1.0.Z",
+                                    "ap-headers/1.3.Z",
+                                    "ap-sdk/1.0.Z",
+                                    "ap-texture/1.0.Z",
+                                    "ap-utils/1.0.Z"
+                                ]
+                            }
+                        },
+                        "3955212c443b372f18cddc2caa6573be7088a1fb": {
+                            "revisions": {
+                                "aba24315d91f90d39282e21a5e80df24": {
+                                    "timestamp": 1792686070.017
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Release",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                },
+                                "requires": [
+                                    "ap-base/1.1.Z",
+                                    "ap-box/1.0.Z",
+                                    "ap-gfx/1.0.Z",
+                                    "ap-headers/1.3.Z",
+                                    "ap-sdk/1.0.Z",
+                                    "ap-texture/1.0.Z",
+                                    "ap-utils/1.0.Z"
+                                ]
+                            }
+                        },
+                        "7fa7b0c43de887c2ee9e10c3c66a3bf6e879aadf": {
+                            "revisions": {
+                                "b452ab61012509fefef4825943cd9f22": {
+                                    "timestamp": 1792686070.074
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Debug",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                },
+                                "requires": [
+                                    "ap-base/1.1.Z",
+                                    "ap-box/1.0.Z",
+                                    "ap-gfx/1.0.Z",
+                                    "ap-headers/1.3.Z",
+                                    "ap-sdk/1.0.Z",
+                                    "ap-texture/1.0.Z",
+                                    "ap-utils/1.0.Z"
+                                ]
+                            }
+                        },
                         "4cbc3e85eba76f84e788f904ac560474dfc08f1c": {
+                            "revisions": {
+                                "4aaab7c92dad31a09af3a36131317c00": {
+                                    "timestamp": 1792685989.682
+                                }
+                            },
                             "info": {
                                 "settings": {
                                     "arch": "x86_64",
@@ -31,7 +129,43 @@
                                 ]
                             }
                         },
+                        "139eb6b7cead9c814ce1ab746ec69da4f154998b": {
+                            "revisions": {
+                                "56ebdceca0e91aead094c673b527dfcf": {
+                                    "timestamp": 1792686158.444
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Release",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                },
+                                "requires": [
+                                    "ap-base/2.0.Z",
+                                    "ap-box/1.0.Z",
+                                    "ap-gfx/1.0.Z",
+                                    "ap-headers/1.3.Z",
+                                    "ap-sdk/1.0.Z",
+                                    "ap-texture/1.0.Z",
+                                    "ap-utils/1.0.Z"
+                                ]
+                            }
+                        },
                         "9c91bc65f8b1da5011139595835b2f24e815bc78": {
+                            "revisions": {
+                                "b534d9e75e666e25fe3334b97d5a3114": {
+                                    "timestamp": 1792685989.741
+                                }
+                            },
                             "info": {
                                 "settings": {
                                     "arch": "x86_64",

@@ -30,7 +30,7 @@ class ApProductBConan(ConanFile):
 
     def requirements(self):
         self.requires("ap-sdk/[>=1.0 <2]")
-        self.requires("ap-base/[>=1.0 <2]")
+        self.requires("ap-base/[>=2.0 <3]")
 
     def generate(self):
         CMakeDeps(self).generate()

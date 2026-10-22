@@ -29,7 +29,7 @@ class ApGfxConan(ConanFile):
             self.options.rm_safe("fPIC")
 
     def requirements(self):
-        self.requires("ap-base/[>=1.0 <2]")
+        self.requires("ap-base/[>=2.0 <3]")
         self.requires("ap-utils/[>=1.0 <2]")
 
     def generate(self):

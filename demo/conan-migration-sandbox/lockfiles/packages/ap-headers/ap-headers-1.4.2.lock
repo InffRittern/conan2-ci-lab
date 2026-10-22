@@ -1,0 +1,9 @@
+{
+    "version": "0.5",
+    "requires": [
+        "ap-headers/1.4.2#39dcfd866b758dcbe0391feb8e26b226%1792686211.4733787"
+    ],
+    "build_requires": [],
+    "python_requires": [],
+    "config_requires": []
+}

@@ -4,8 +4,8 @@
 #define AP_BASE_VERSION_STRING "1.0.0"
 #endif
 
-int ap_base_add(int a, int b) {
-    return a + b;
+int ap_base_add(int a, int b, int c) {
+    return a + b + c;
 }
 
 int ap_base_multiply(int a, int b) {

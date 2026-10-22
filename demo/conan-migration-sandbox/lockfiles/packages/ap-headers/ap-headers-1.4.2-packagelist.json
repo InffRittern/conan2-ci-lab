@@ -1,0 +1,57 @@
+{
+    "packages": {
+        "ap-headers/1.4.2": {
+            "revisions": {
+                "39dcfd866b758dcbe0391feb8e26b226": {
+                    "timestamp": 1792686216.192,
+                    "packages": {
+                        "87bbb286a7517318e730f10181ac32c50f1dbc94": {
+                            "revisions": {
+                                "b3616e4f16e284b3cb89d84197a60505": {
+                                    "timestamp": 1792686216.318
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Release",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                }
+                            }
+                        },
+                        "3eb09c26f74052640128a3fbc8b68ebf3546fcd9": {
+                            "revisions": {
+                                "704b32eb1fa1b57cc6e1a42293941f15": {
+                                    "timestamp": 1792686216.254
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Debug",
+                                    "compiler": "gcc",
+                                    "compiler.cppstd": "17",
+                                    "compiler.libcxx": "libstdc++11",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "fPIC": "True",
+                                    "shared": "False"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

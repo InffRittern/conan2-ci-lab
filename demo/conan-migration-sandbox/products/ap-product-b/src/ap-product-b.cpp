@@ -8,5 +8,5 @@ const char *ap_product_b_product_name() {
 }
 
 int ap_product_b_product_score(int seed) {
-    return ap_sdk_render(seed, seed + 1) + ap_base_add(seed, 2);
+    return ap_sdk_render(seed, seed + 1) + ap_base_add(seed, 2, 0);
 }
