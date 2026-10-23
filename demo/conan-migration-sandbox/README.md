@@ -107,7 +107,8 @@ Source-структура Conan 1.x сохранена для истории м�
 | `conan-remote` | REMOTE | `https://center.conan.io` |
 
 Target Conan 2.x: `packages` (библиотеки `ap-*`), `products`
-(`ap-product-a`, `ap-product-b`), `develop` (продвинутые продукты), virtual
+(`ap-product-a`, `ap-product-b`), `develop` (продвинутые продукты),
+`conancenter-fork` (бинарники из приватного форка Conan Center) и virtual
 `conan2`. Пакеты пересобраны Conan 2.33.0; порядок миграции —
 [`../../conan1-conan2-migration-runbook.md`](../../conan1-conan2-migration-runbook.md).
 
@@ -202,7 +203,7 @@ bash scripts/products-pipeline.sh products/ap-product-a
 bash scripts/products-pipeline.sh products/ap-product-b
 ```
 
-Полный пошаговый сценарий — `scenarios/01-basic-build.md`.
+Полный пошаговый сценарий — `../../scenarios/01-basic-build.md`.
 
 ### Staged CI: релиз без «рецепта без бинарников»
 
@@ -238,8 +239,8 @@ lockfiles/ap-product-a/ap-product-a.lock
 lockfiles/ap-product-b/ap-product-b.lock
 ```
 
-Подробные сценарии — `scenarios/05-staged-package-release.md` …
-`scenarios/08-conan1-to-conan2-cutover.md`.
+Подробные сценарии — `../../scenarios/05-staged-package-release.md` …
+`../../scenarios/08-conan1-to-conan2-cutover.md`.
 
 ### Важно про запуск в WSL/DrvFs
 
@@ -269,7 +270,7 @@ lockfiles/ap-product-a/ap-product-a-1.0.0-packagelist.json
 ```
 
 Используйте их для воспроизведения старой версии, когда в `develop` уже
-появились новые библиотеки (см. `scenarios/04-reproducible-old-version.md`).
+появились новые библиотеки (см. `../../scenarios/04-reproducible-old-version.md`).
 
 `ci-products-release.sh` дополнительно пишет `lockfiles/ci/all-products.lock`
 (единый граф обоих продуктов) и `lockfiles/ci/release-manifest.json` —
@@ -301,6 +302,8 @@ Remote-имена настраиваются через `PACKAGES_REMOTE`, `PROD
 
 ## Сценарии
 
+Сценарии лежат в корне репозитория, в каталоге `../../scenarios/`.
+
 | Сценарий | Тема |
 |---|---|
 | `01-basic-build.md` | базовая сборка и promote |
@@ -311,6 +314,7 @@ Remote-имена настраиваются через `PACKAGES_REMOTE`, `PROD
 | `06-unified-product-release.md` | единый граф продуктов и promote набора |
 | `07-major-prerelease.md` | политика major и pre-release |
 | `08-conan1-to-conan2-cutover.md` | cutover CI с Conan 1 на Conan 2 |
+| `09-conan-center-fork.md` | форк Conan Center как источник рецептов и бинарников |
 
 ## Известные ограничения
 
@@ -380,7 +384,7 @@ Remote-имена настраиваются через `PACKAGES_REMOTE`, `PROD
    проверить `release-manifest.json` и `ci-verify-release.sh`.
 8. Отрицательная проверка: сломать исходник в копии, убедиться, что
    `release-manifest.json` не создан, а `develop` не изменился.
-9. Пройти `scenarios/01-basic-build.md` … `08-conan1-to-conan2-cutover.md`.
+9. Пройти `../../scenarios/01-basic-build.md` … `../../scenarios/09-conan-center-fork.md`.
 10. Для миграции хранилища выполнить
     [`../../conan1-conan2-migration-runbook.md`](../../conan1-conan2-migration-runbook.md):
     freeze, service account, TLS, backup, cutover и rollback.
@@ -418,20 +422,11 @@ conan-migration-sandbox/
 │   ├── ci-products-release.sh
 │   ├── ci-verify-release.sh
 │   └── scenario-major-bump.sh
-├── lockfiles/
-│   ├── ap-product-a/
-│   ├── ap-product-b/
-│   ├── packages/
-│   └── ci/
-│       ├── all-products.lock
-│       └── release-manifest.json
-└── scenarios/
-    ├── 01-basic-build.md
-    ├── 02-breaking-change.md
-    ├── 03-major-bump.md
-    ├── 04-reproducible-old-version.md
-    ├── 05-staged-package-release.md
-    ├── 06-unified-product-release.md
-    ├── 07-major-prerelease.md
-    └── 08-conan1-to-conan2-cutover.md
+└── lockfiles/
+    ├── ap-product-a/
+    ├── ap-product-b/
+    ├── packages/
+    └── ci/
+        ├── all-products.lock
+        └── release-manifest.json
 ```

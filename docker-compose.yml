@@ -333,7 +333,8 @@ services:
         # существующие репозитории обновляются, отсутствующие создаются.
         #
         # source-* — то, что читает Conan 1; packages/products/develop —
-        # целевые Conan 2 remotes; conan/conan2 — virtual-представления.
+        # целевые Conan 2 remotes; conancenter-fork — бинарники из форка
+        # Conan Center; conan/conan2 — virtual-представления.
         cat >/tmp/repos.yaml <<'YAML'
         localRepositories:
           conan-local:
@@ -342,9 +343,6 @@ services:
           ap-source:
             type: conan
             description: Conan 1 source packages (additional)
-          conan-thirdparty:
-            type: conan
-            description: Conan 1 third-party packages
           ap-thirdparty:
             type: conan
             description: Additional third-party packages
@@ -360,6 +358,9 @@ services:
           develop:
             type: conan
             description: Conan 2 development stage
+          conancenter-fork:
+            type: conan
+            description: Binaries built from the private Conan Center fork
 
         remoteRepositories:
           conan-remote:
@@ -373,9 +374,12 @@ services:
             repositories:
               - conan-local
               - ap-source
-              - conan-thirdparty
               - ap-thirdparty
               - conan-remote
+          conan-thirdparty:
+            type: conan
+            repositories:
+              - ap-thirdparty
           conan2:
             type: conan
             repositories:

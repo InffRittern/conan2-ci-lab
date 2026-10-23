@@ -105,6 +105,7 @@ Bootstrap складывает машинные секреты в `.secrets/`:
 | local | `conan-local`, `ap-source`, `conan-thirdparty`, `ap-thirdparty` | source-репозитории Conan 1 |
 | local | `generic-local` | прочие исходные артефакты |
 | local | `packages`, `products`, `develop` | целевые стадии Conan 2 |
+| local | `conancenter-fork` | бинарники, собранные из приватного форка Conan Center |
 | remote | `conan-remote` | ConanCenter (`https://center.conan.io`) |
 | virtual | `conan` | source-репозитории + ConanCenter |
 | virtual | `conan2` | `packages` + `products` + `develop` |
@@ -148,6 +149,7 @@ bash scripts/promote.sh 'ap-base/1.0.0' packages products
 Полный порядок сборки с версиями `ap-headers`, остальными продуктами,
 ограничения и разбор ошибок — в
 [`demo/conan-migration-sandbox/README.md`](demo/conan-migration-sandbox/README.md).
+Пошаговые сценарии стенда — в каталоге [`scenarios/`](scenarios/) (`01` … `09`).
 Пошаговая миграция хранилища описана в
 [`conan1-conan2-migration-runbook.md`](conan1-conan2-migration-runbook.md).
 
@@ -165,13 +167,14 @@ Jenkins job по push не создаётся автоматически: bootst
 ├── .env.example                # локальные параметры без секретов
 ├── .gitignore                  # исключает секреты, кэши и артефакты сборки
 ├── conan1-conan2-migration-runbook.md # пошаговая миграция Conan 1 → 2
+├── scenarios/                  # пошаговые сценарии стенда (01–09)
 ├── scripts/
 │   ├── linux/                  # шаги 00–08 для bash
 │   └── windows/                # те же шаги для PowerShell
 ├── jenkins/                    # Dockerfile Jenkins с Conan toolchain
 ├── postgres/init/              # создание БД Gitea
 └── demo/
-    ├── conan-migration-sandbox/ # рецепты, профили, lockfiles, сценарии миграции
+    ├── conan-migration-sandbox/ # рецепты, профили, lockfiles, CI-скрипты
     └── recipe-demo/             # минимальный Conan 2-рецепт для проверки
 ```
 

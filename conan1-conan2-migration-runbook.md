@@ -2,16 +2,18 @@
 
 Документ описывает миграцию Conan-хранилища в JFrog Artifactory CE.
 Проверено на Artifactory CE `7.161.26`, Conan 1.66.0 и Conan 2.33.0,
-Linux/GCC 13; сценарии `01–08` демонстрационного стенда пройдены.
+Linux/GCC 13; сценарии `01–08` демонстрационного стенда пройдены,
+`09` описывает расширение с приватным форком Conan Center.
 
 Артефакты Conan хранятся только в JFrog Artifactory. Gitea используется
 только как Git-хостинг исходников, Jenkins — только как CI/CD runner.
 Мигрирует только Conan-хранилище; исходники, Git-история, Jenkins jobs и
 SCM не переносятся.
 
-Все относительные пути в примерах (`profiles/...`, `scenarios/...`) указаны
+Все относительные пути в примерах (`profiles/...`, `scripts/...`) указаны
 от `demo/conan-migration-sandbox`, если не указано иное; при запуске из корня
-репозитория добавляйте этот префикс.
+репозитория добавляйте этот префикс. Сценарии стенда лежат в `scenarios/`
+в корне репозитория.
 
 ## Архитектура
 
@@ -526,9 +528,10 @@ Pre-release (`2.0.0-beta.1`) остаётся в `packages`: `--no-promote` не
 Ограничение Artifactory CE: штатного `conan art:promote` нет, поэтому
 `promote.sh` не транзакционен. Манифест и проверка компенсируют это, но не
 делают promote атомарным. Подробные сценарии:
-[`05-staged-package-release.md`](demo/conan-migration-sandbox/scenarios/05-staged-package-release.md),
-[`06-unified-product-release.md`](demo/conan-migration-sandbox/scenarios/06-unified-product-release.md),
-[`08-conan1-to-conan2-cutover.md`](demo/conan-migration-sandbox/scenarios/08-conan1-to-conan2-cutover.md).
+[`05-staged-package-release.md`](scenarios/05-staged-package-release.md),
+[`06-unified-product-release.md`](scenarios/06-unified-product-release.md),
+[`08-conan1-to-conan2-cutover.md`](scenarios/08-conan1-to-conan2-cutover.md),
+[`09-conan-center-fork.md`](scenarios/09-conan-center-fork.md).
 
 ## 8. Проверка потребителя
 

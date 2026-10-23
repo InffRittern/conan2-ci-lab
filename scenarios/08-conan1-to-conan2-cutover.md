@@ -38,21 +38,31 @@ done
 
 for r in conan-local ap-source conan-thirdparty ap-thirdparty conan; do
   echo "== $r"
-  $CONAN1 search "*" --revisions -r "$r"
+  $CONAN1 search "*" -r "$r"
 done > /tmp/conan1-inventory.txt
+```
+
+В Conan 1.66 `search "*" --revisions` завершается ошибкой: `--revisions`
+требует конкретный ref. Поэтому revisions и package ID снимайте отдельно для
+каждого ref из списка:
+
+```bash
+$CONAN1 search 'ap-thirdparty/1.0.0@' --revisions -r conan-thirdparty
+$CONAN1 search 'zlib/1.3.1@' --revisions -r conan
 ```
 
 Нужен именно `--revisions`: без него нет recipe revision и нельзя сопоставить
 старые бинарники с новыми.
 
-Дополнительно снимите JSON для машинной сверки:
+Дополнительно снимите JSON для машинной сверки (без `--revisions`, затем
+уточняйте revisions по каждому ref):
 
 ```bash
-$CONAN1 search "*" --revisions --json /tmp/conan1-all.json
+$CONAN1 search "*" --json /tmp/conan1-all.json -r conan
 ```
 
 Полный manifest `repo|ref|rrev|pkgid` и перенос точных pref описаны в
-[`../../../conan1-conan2-migration-runbook.md`](../../../conan1-conan2-migration-runbook.md),
+[`../conan1-conan2-migration-runbook.md`](../conan1-conan2-migration-runbook.md),
 разделы 2 и 6. Он нужен для аудита и rollback, но **не заменяет пересборку**:
 package ID Conan 2 другой.
 
