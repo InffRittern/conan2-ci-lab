@@ -134,7 +134,6 @@ echo "=== Merging build-order ==="
 conan graph build-order-merge \
     --file "$order_release" \
     --file "$order_debug" \
-    --reduce \
     --format=json \
     --out-file "$order_merged"
 
@@ -145,10 +144,13 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     data = json.load(handle)
 
+seen = set()
 for level in data.get("order", []):
     for node in level:
         ref = node["ref"].split("#", 1)[0]
-        print(ref)
+        if ref not in seen:
+            seen.add(ref)
+            print(ref)
 PY
 )"
 
@@ -210,10 +212,17 @@ conan list "$product_name/$version:*#*" \
 
 # Keep immutable per-version copies. The canonical files above are convenient
 # for the current pipeline run; the versioned ones are what reproducibility
-# scenarios use after newer library versions appear.
-cp "$lockfile" "$lock_dir/$product_name-$version.lock"
-cp "$lock_dir/$product_name-packagelist.json" \
-    "$lock_dir/$product_name-$version-packagelist.json"
+# scenarios use after newer library versions appear. Never overwrite them:
+# rebuilding the same product version against a new graph must not destroy the
+# release baseline.
+versioned_lock="$lock_dir/$product_name-$version.lock"
+versioned_list="$lock_dir/$product_name-$version-packagelist.json"
+if [ -e "$versioned_lock" ] || [ -e "$versioned_list" ]; then
+    echo "Keeping existing versioned artifacts for ${product_name}/${version}" >&2
+else
+    cp "$lockfile" "$versioned_lock"
+    cp "$lock_dir/$product_name-packagelist.json" "$versioned_list"
+fi
 
 echo "Done: ${product_name}/${version}"
 echo "Lockfile:     $lockfile"

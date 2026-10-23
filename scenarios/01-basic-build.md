@@ -3,6 +3,20 @@
 Цель: собрать все библиотеки, залить их в `packages`, собрать оба продукта с
 lockfile и получить в `develop` `ap-product-a/1.0.0` и `ap-product-b/1.0.0`.
 
+> Сценарии 01–03 выполняются от baseline-коммита `5ce4447`: там
+> `ap_base_add(int, int)` и диапазоны `[>=1 <2]`. В текущем `HEAD` уже
+> применён результат сценария 03 (три аргумента и диапазоны `[>=2 <3]`),
+> поэтому для повторного прогона создайте отдельный worktree:
+>
+> ```bash
+> git worktree add --detach /tmp/conan2-baseline 5ce4447
+> cd /tmp/conan2-baseline
+> ```
+>
+> Скрипты и документацию из текущего `HEAD` можно скопировать поверх
+> baseline worktree; source-файлы `libs/`, `products/` и `ci/` должны
+> остаться из `5ce4447`.
+
 ## Подготовка
 
 ```bash
@@ -87,6 +101,24 @@ test -s lockfiles/ap-product-b/ap-product-b-packagelist.json
 
 В `ap-product-a-packagelist.json` и `ap-product-b-packagelist.json` должны быть
 `package_id` и `package_rev` для обеих конфигураций.
+
+## 4. Зафиксировать baseline до новых версий
+
+Сразу после успешной базовой сборки сохраните lockfile и package list в
+неизменяемое место. Сценарии 04 и 07 используют эту копию: канонический
+`ap-product-a.lock` позже будет перезаписан релизом с другими зависимостями.
+
+```bash
+mkdir -p /tmp/ap-product-a-old /tmp/ap-product-b-old
+cp lockfiles/ap-product-a/ap-product-a.lock /tmp/ap-product-a-old/
+cp lockfiles/ap-product-a/ap-product-a-packagelist.json /tmp/ap-product-a-old/
+cp lockfiles/ap-product-b/ap-product-b.lock /tmp/ap-product-b-old/
+cp lockfiles/ap-product-b/ap-product-b-packagelist.json /tmp/ap-product-b-old/
+```
+
+`products-pipeline.sh` также создаёт версионные копии
+`ap-product-a-1.0.0.lock` и `ap-product-a-1.0.0-packagelist.json` и больше
+не перезаписывает их при повторной сборке той же версии продукта.
 
 ## Ожидаемый результат
 

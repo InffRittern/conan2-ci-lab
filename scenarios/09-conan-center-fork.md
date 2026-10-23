@@ -79,9 +79,13 @@ curl -sS -o /dev/null -w '%{http_code}\n' \
 
 cd /tmp/cci-fork
 git fetch --unshallow
-git push "http://admin:${GITEA_TOKEN}@localhost:3000/packages/conan-center-index.git" \
-  HEAD:master
+# Gitea принимает токен в заголовке; basic-auth admin:token здесь даёт 401.
+git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" push --force \
+  http://localhost:3000/packages/conan-center-index.git HEAD:master
 ```
+
+`--force` делает повторный прогон идемпотентным: репозиторий Gitea может уже
+содержать предыдущий снимок форка.
 
 Зафиксируйте базовый commit upstream (до правок):
 
@@ -112,8 +116,8 @@ git rev-parse HEAD | tee /tmp/cci-fork-base.txt
 ```bash
 git add recipes/zlib/all/conanfile.py
 git commit -m "fork: build zlib shared by default"
-git push "http://admin:${GITEA_TOKEN}@localhost:3000/packages/conan-center-index.git" \
-  HEAD:master
+git -c http.extraHeader="Authorization: token ${GITEA_TOKEN}" push --force \
+  http://localhost:3000/packages/conan-center-index.git HEAD:master
 
 # Именно этот commit попадает в сборку и в артефакты релиза.
 git rev-parse HEAD | tee /tmp/cci-fork-commit.txt
@@ -136,7 +140,8 @@ conan profile detect --force
 conan remote remove conancenter || true
 
 # allowed-packages ограничивает remote только нужными рецептами.
-conan remote add cci-fork /tmp/cci-fork --allowed-packages="zlib/*"
+conan remote add cci-fork /tmp/cci-fork \
+  -t local-recipes-index --allowed-packages="zlib/*"
 
 conan list "zlib/*" -r=cci-fork
 ```

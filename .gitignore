@@ -61,6 +61,10 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+demo/sfl
+demo/fmt
+demo/fmt-recipe
+demo/conan-thirdparty-index
 
 # Conan lockfiles и package list не игнорируются:
 # они нужны для воспроизводимости сборок.

@@ -65,8 +65,9 @@ test -s lockfiles/packages/ap-headers/ap-headers-1.4.2-packagelist.json
 Ожидается:
 
 - в `packages` и `products` по два package ID: Release и Debug;
-- package list содержит `package_rev`, а не только `package_id`;
-- lockfile содержит обе конфигурации.
+- package list содержит `package_rev` для обоих бинарников, а не только `package_id`;
+- merged lockfile фиксирует точный рецепт; обе конфигурации перечислены в
+  package list.
 
 ## 3. Staging без promotion
 

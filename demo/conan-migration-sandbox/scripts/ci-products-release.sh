@@ -35,6 +35,13 @@ done
 export AP_PRODUCT_A_VERSION="${AP_PRODUCT_A_VERSION:-1.0.0}"
 export AP_PRODUCT_B_VERSION="${AP_PRODUCT_B_VERSION:-1.0.0}"
 
+# A new product version may not exist in the resolve remote yet.  Export both
+# product recipes into the local cache first so the unified lock can resolve
+# them; the upload happens only after the whole graph has been built.
+for product in ap-product-a ap-product-b; do
+    conan export "$ROOT_DIR/products/$product"
+done
+
 META_DIR="$ROOT_DIR/ci/all-products"
 LOCK_DIR="$ROOT_DIR/lockfiles/ci"
 BUILD_DIR="$ROOT_DIR/build/ci-products"
@@ -202,15 +209,29 @@ for product in ap-product-a ap-product-b; do
     # The unified lockfile is valid for a single product as well: it contains
     # all products and all shared dependencies, so it pins the whole release.
     cp "$LOCKFILE" "$product_lock_dir/$product.lock"
-    cp "$LOCKFILE" "$product_lock_dir/$product-$product_version.lock"
+
+    # Versioned artifacts are immutable: a later release of the same product
+    # version against a different graph must not destroy the old baseline.
+    versioned_lock="$product_lock_dir/$product-$product_version.lock"
+    versioned_list="$product_lock_dir/$product-$product_version-packagelist.json"
 
     if [ "$PROMOTE_TO_DEVELOP" = "1" ]; then
         conan list "$product/$product_version:*#*" \
             -r "$DEVELOP_REMOTE" \
             --format=json \
             --out-file "$product_lock_dir/$product-packagelist.json"
-        cp "$product_lock_dir/$product-packagelist.json" \
-            "$product_lock_dir/$product-$product_version-packagelist.json"
+        if [ -e "$versioned_lock" ] || [ -e "$versioned_list" ]; then
+            echo "Keeping existing versioned artifacts for ${product}/${product_version}" >&2
+        else
+            cp "$LOCKFILE" "$versioned_lock"
+            cp "$product_lock_dir/$product-packagelist.json" "$versioned_list"
+        fi
+    else
+        if [ -e "$versioned_lock" ]; then
+            echo "Keeping existing versioned artifacts for ${product}/${product_version}" >&2
+        else
+            cp "$LOCKFILE" "$versioned_lock"
+        fi
     fi
 done
 

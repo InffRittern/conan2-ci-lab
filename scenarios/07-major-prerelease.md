@@ -31,17 +31,24 @@ bash scripts/ci-package-release.sh libs/ap-base 2.0.0
 
 ### Шаг 2. Убедиться, что старый продукт не переключился
 
+Используйте версионный lockfile, сохранённый при базовом релизе. Канонический
+`ap-product-a.lock` после сценария 03 уже описывает граф с `ap-base/2.x` и для
+проверки старого релиза не подходит.
+
 ```bash
+test -s lockfiles/ap-product-a/ap-product-a-1.0.0.lock
 conan install products/ap-product-a \
   -pr:h profiles/linux-gcc-release \
   -pr:b profiles/linux-gcc-release \
   -s build_type=Release \
-  --lockfile lockfiles/ap-product-a/ap-product-a.lock \
+  --lockfile lockfiles/ap-product-a/ap-product-a-1.0.0.lock \
   --build=never
 ```
 
 Lockfile старого релиза всё ещё указывает на `ap-base/1.x`. Новый мажор в
-`products` не меняет уже сохранённый lockfile.
+`products` не меняет уже сохранённый lockfile. `products-pipeline.sh` не
+перезаписывает версионные копии, поэтому baseline переживает пересборку
+продукта той же версии.
 
 ### Шаг 3. Осознанно включить мажор
 
@@ -68,6 +75,14 @@ Lockfile старого релиза всё ещё указывает на `ap-b
 +self.requires("ap-base/[>=2.0 <3]")
 ```
 
+```diff
+# ci/all-products/conanfile.py
+-self.requires("ap-product-a/[>=1.0 <2]")
+-self.requires("ap-product-b/[>=1.0 <2]")
++self.requires("ap-product-a/[>=2.0 <3]")
++self.requires("ap-product-b/[>=2.0 <3]")
+```
+
 Если менялся API, сначала правятся исходники и `test_package`. Падение
 сборки — ожидаемый сигнал: старый код не совместим с новым мажором.
 
@@ -80,8 +95,9 @@ bash scripts/ci-package-release.sh libs/ap-utils 2.0.0
 bash scripts/ci-package-release.sh libs/ap-gfx 2.0.0
 bash scripts/ci-package-release.sh libs/ap-sdk 2.0.0
 
-# продукт 2.0.0 с диапазонами [>=2 <3]
-AP_PRODUCT_A_VERSION=2.0.0 bash scripts/ci-products-release.sh
+# продукт 2.0.0 с диапазонами [>=2 <3] в продуктах и ci/all-products
+AP_PRODUCT_A_VERSION=2.0.0 AP_PRODUCT_B_VERSION=2.0.0 \
+  bash scripts/ci-products-release.sh
 ```
 
 ## 2. Pre-release не должен попадать в стабильный диапазон
@@ -138,7 +154,7 @@ test-потребителем.
 в отдельном тестовом графе и с явной нижней границей, например:
 
 ```text
-ap-base/[>=2.0.0-beta.1, include_prerelease]
+ap-base/[>=2.0.0-beta.1 <3, include_prerelease]
 ```
 
 Не добавляйте такой диапазон в стабильные продукты: он начнёт подхватывать
@@ -158,13 +174,18 @@ beta/rc автоматически.
 
 ```bash
 # старый продукт должен ставиться без сборки
-conan install products/ap-product-a \
+conan install --requires=ap-product-a/1.0.0 \
   -pr:h profiles/linux-gcc-release \
   -pr:b profiles/linux-gcc-release \
   -s build_type=Release \
-  --lockfile lockfiles/ap-product-a/ap-product-a.lock \
+  --lockfile lockfiles/ap-product-a/ap-product-a-1.0.0.lock \
   --build=never
 ```
+
+Корень задаётся точным ref, а не каталогом `products/ap-product-a`:
+после шага 3 локальный `conanfile.py` уже требует `ap-sdk/[>=2 <3]`, и
+Conan справедливо отклонит его как несовместимый со старым lockfile
+(`Requirement 'ap-sdk/[>=2 <3]' not in lockfile 'requires'`).
 
 Если команда падает на `Missing binary`, значит lockfile/package list не
 фиксируют старый бинарник. Проверьте, что package list снят с `:*#*`, а не с

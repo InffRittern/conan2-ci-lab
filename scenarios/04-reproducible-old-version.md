@@ -99,6 +99,8 @@ lockfiles/ap-product-a/ap-product-a-1.0.0.lock
 lockfiles/ap-product-a/ap-product-a-1.0.0-packagelist.json
 ```
 
+Версионные файлы не перезаписываются: повторная сборка
+`ap-product-a/1.0.0` с другим графом обновит только канонические файлы.
 Для старой версии используйте версионные файлы:
 
 ```bash

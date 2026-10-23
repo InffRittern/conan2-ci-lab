@@ -1,0 +1,51 @@
+{
+    "conancenter-fork": {
+        "zlib/1.3.2": {
+            "revisions": {
+                "e07ab98c08c0d9cd66693b474e1a39e7": {
+                    "timestamp": 1792752810.096,
+                    "packages": {
+                        "91bdf5dfaf82ddebf7cf38bc71a5e24543a7b68c": {
+                            "revisions": {
+                                "030385df808c613b7fd795cfa8935b23": {
+                                    "timestamp": 1792752810.214
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Debug",
+                                    "compiler": "gcc",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "shared": "True"
+                                }
+                            }
+                        },
+                        "17561cbc2922b459119809d525458e11e7bcb047": {
+                            "revisions": {
+                                "ca233db002e7c69f96e0029c35c6c7c2": {
+                                    "timestamp": 1792752810.164
+                                }
+                            },
+                            "info": {
+                                "settings": {
+                                    "arch": "x86_64",
+                                    "build_type": "Release",
+                                    "compiler": "gcc",
+                                    "compiler.version": "13",
+                                    "os": "Linux"
+                                },
+                                "options": {
+                                    "shared": "True"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

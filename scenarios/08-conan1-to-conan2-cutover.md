@@ -102,16 +102,37 @@ curl -u "$ARTIFACTORY_USER:$ARTIFACTORY_PASSWORD" \
 
 ## Фаза 3. Пересборка библиотек в Conan 2
 
-В окружении Conan 2:
+Cutover выполняется из чистого baseline, а не из рабочего дерева, где уже
+применены сценарии 02/03. Иначе `ap-base` будет с трёхаргументным API, а
+диапазоны будут `[>=2 <3]`.
 
 ```bash
-cd demo/conan-migration-sandbox
+git worktree remove --force /tmp/conan2-cutover 2>/dev/null || true
+rm -rf /tmp/conan2-cutover
+git worktree add --detach /tmp/conan2-cutover 5ce4447
+cp -a demo/conan-migration-sandbox/scripts \
+  /tmp/conan2-cutover/demo/conan-migration-sandbox/
+cp -a demo/conan-migration-sandbox/ci \
+  /tmp/conan2-cutover/demo/conan-migration-sandbox/
+cd /tmp/conan2-cutover/demo/conan-migration-sandbox
+
+# Отдельный кэш: локальные рецепты участвуют в разрешении диапазонов и могут
+# затенять remote (например, неудачный ap-base/1.9.9 из другого эксперимента).
+export CONAN_HOME=/tmp/conan2-cutover-home
+rm -rf "$CONAN_HOME"
+conan profile detect --force
+
 export CONAN_USERNAME=admin
 export CONAN_PASSWORD='<artifactory-пароль>'
 export PACKAGES_REMOTE=packages
 export PRODUCTS_REMOTE=products
 export DEVELOP_REMOTE=develop
 bash scripts/bootstrap-remotes.sh
+
+# Target-репозитории должны быть пустыми: cutover пересобирает baseline.
+for r in packages products develop; do
+  conan remove "*" -r "$r" -c
+done
 ```
 
 Собирайте в порядке зависимостей. Каждый вызов публикует полный пакет
@@ -161,6 +182,12 @@ bash scripts/ci-verify-release.sh
 Если сборка любого продукта падает, `develop` не меняется. Это заменяет
 пошаговый promote, при котором первый продукт уже оказывался в `develop`,
 а второй падал.
+
+После unified release у `ap-texture/1.0.0` в `products` и `develop` остаётся
+четыре package ID: два собраны пакетным пайплайном против
+`ap-headers/1.4.1`, два — в unified graph, где `ap-box` принудительно пинит
+`ap-headers/1.3.290`. Это разные зависимости, а не дубликаты; `packages`
+по-прежнему содержит ровно две конфигурации.
 
 ## Фаза 5. Проверка потребителя
 
