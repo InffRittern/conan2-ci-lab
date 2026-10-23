@@ -96,18 +96,20 @@ Bootstrap складывает машинные секреты в `.secrets/`:
 `SETUP-REPORT.md` содержит фактическое состояние стенда и также исключён из Git.
 Его можно открыть после bootstrap.
 
-## Что создаётся в Artifactory
+## Роли репозиториев Artifactory
 
-`artifactory-init` автоматически создаёт при первом запуске:
+`artifactory-init` создаёт репозитории при первом запуске. В документе
+используются абстрактные имена; фактические имена стенда задаются в
+`docker-compose.yml`.
 
-| Тип | Имя | Назначение |
+| Тип | Имя в документации | Назначение |
 |---|---|---|
-| local | `conan-local`, `ap-source`, `conan-thirdparty`, `ap-thirdparty` | source-репозитории Conan 1 |
+| local | `source-local`, `source-libs`, `source-thirdparty`, `source-thirdparty-mirror` | source-репозитории Conan 1 |
 | local | `generic-local` | прочие исходные артефакты |
 | local | `packages`, `products`, `develop` | целевые стадии Conan 2 |
 | local | `conancenter-fork` | бинарники, собранные из приватного форка Conan Center |
 | remote | `conan-remote` | ConanCenter (`https://center.conan.io`) |
-| virtual | `conan` | source-репозитории + ConanCenter |
+| virtual | `source-all` | source-репозитории + ConanCenter |
 | virtual | `conan2` | `packages` + `products` + `develop` |
 
 Bootstrap настраивает в контейнере `conan` remotes `packages`, `products` и
@@ -129,25 +131,18 @@ cd demo/conan-migration-sandbox
 bash scripts/bootstrap-remotes.sh
 
 # Сборка библиотек в порядке зависимостей; скрипт принимает путь и версию.
-bash scripts/packages-pipeline.sh libs/ap-base 1.0.0
-bash scripts/packages-pipeline.sh libs/ap-headers 1.3.290
-bash scripts/packages-pipeline.sh libs/ap-headers 1.4.1
-bash scripts/packages-pipeline.sh libs/ap-utils 1.0.0
-bash scripts/packages-pipeline.sh libs/ap-gfx 1.0.0
-bash scripts/packages-pipeline.sh libs/ap-texture 1.0.0
-bash scripts/packages-pipeline.sh libs/ap-box 1.0.0
-bash scripts/packages-pipeline.sh libs/ap-sdk 1.0.0
+# <package-dir> и <version> — значения из demo/conan-migration-sandbox.
+bash scripts/packages-pipeline.sh "libs/<package-dir>" "<version>"
 
 # Сборка продукта, публикация в products и продвижение в develop.
-bash scripts/products-pipeline.sh products/ap-product-a
-bash scripts/products-pipeline.sh products/ap-product-b
+bash scripts/products-pipeline.sh "products/<product-dir>"
 
 # Точечное продвижение уже собранного пакета.
-bash scripts/promote.sh 'ap-base/1.0.0' packages products
+bash scripts/promote.sh '<package>/<version>' packages products
 ```
 
-Полный порядок сборки с версиями `ap-headers`, остальными продуктами,
-ограничения и разбор ошибок — в
+Полный порядок сборки, конкретные каталоги и версии, ограничения и разбор
+ошибок — в
 [`demo/conan-migration-sandbox/README.md`](demo/conan-migration-sandbox/README.md).
 Пошаговые сценарии стенда — в каталоге [`scenarios/`](scenarios/) (`01` … `09`).
 Пошаговая миграция хранилища описана в
